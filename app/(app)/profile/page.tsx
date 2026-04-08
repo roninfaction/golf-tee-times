@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(true);
 
   const forwardingEmail = forwarderToken
     ? `tee-${forwarderToken}@${EMAIL_FORWARD_DOMAIN}`
@@ -23,17 +24,35 @@ export default function ProfilePage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+      if (!user) {
+        setProfileLoading(false);
+        return;
+      }
       setEmail(user.email ?? "");
       supabase
         .from("profiles")
         .select("display_name, forwarder_token")
         .eq("id", user.id)
         .single()
-        .then(({ data }) => {
+        .then(({ data, error }) => {
+          setProfileLoading(false);
           if (data) {
             setDisplayName(data.display_name ?? "");
             setForwarderToken(data.forwarder_token ?? "");
+          } else if (error) {
+            // Profile doesn't exist yet — create it
+            supabase.from("profiles").insert({
+              id: user.id,
+              email: user.email ?? "",
+              display_name: (user.email ?? "").split("@")[0],
+            }).then(() => {
+              supabase.from("profiles").select("display_name, forwarder_token").eq("id", user.id).single().then(({ data }) => {
+                if (data) {
+                  setDisplayName(data.display_name ?? "");
+                  setForwarderToken(data.forwarder_token ?? "");
+                }
+              });
+            });
           }
         });
     });
@@ -102,7 +121,9 @@ export default function ProfilePage() {
           Forward any golf course confirmation email to this address and TeeUp will
           automatically create the tee time for your group.
         </p>
-        {forwardingEmail ? (
+        {profileLoading ? (
+          <p className="text-slate-600 text-sm">Loading…</p>
+        ) : forwardingEmail ? (
           <>
             <div className="bg-slate-800 rounded-xl px-4 py-3 mb-3">
               <p className="text-green-400 font-mono text-sm break-all">{forwardingEmail}</p>
@@ -116,7 +137,7 @@ export default function ProfilePage() {
             </button>
           </>
         ) : (
-          <p className="text-slate-600 text-sm">Loading…</p>
+          <p className="text-slate-500 text-sm">No forwarding address found.</p>
         )}
       </div>
 

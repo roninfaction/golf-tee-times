@@ -1,5 +1,5 @@
 name = "golf-tee-times-cron"
-main = "cron-worker/index.js"
+main = "index.js"
 compatibility_date = "2024-09-23"
 
 [triggers]

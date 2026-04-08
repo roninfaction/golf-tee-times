@@ -18,9 +18,6 @@ export default function LoginPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
     });
 
     setLoading(false);
@@ -97,7 +94,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="block text-sm text-slate-400 mb-1.5" htmlFor="code">
-                Enter 6-digit code
+                Enter your code
               </label>
               <input
                 id="code"
@@ -107,7 +104,7 @@ export default function LoginPage() {
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="123456"
                 required
-                maxLength={6}
+                maxLength={8}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 text-base text-center tracking-widest text-xl"
               />
             </div>

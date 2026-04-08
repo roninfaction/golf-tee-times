@@ -25,8 +25,16 @@ export default function ProfilePage() {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
-        setForwarderToken("__NO_SESSION__");
-        setLoading(false);
+        // Try refreshing the session first
+        supabase.auth.refreshSession().then(({ data: { session: refreshed } }) => {
+          if (!refreshed) {
+            setForwarderToken("__NO_SESSION_EVEN_AFTER_REFRESH__");
+            setLoading(false);
+          } else {
+            setForwarderToken(`__REFRESHED_OK_token_starts:${refreshed.access_token.slice(0,20)}__`);
+            setLoading(false);
+          }
+        });
         return;
       }
       fetch("/api/profile", {

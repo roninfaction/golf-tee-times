@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="100" fill="#0f172a"/>
+
+  <!-- Flagpole -->
+  <rect x="185" y="100" width="14" height="280" rx="7" fill="#94a3b8"/>
+
+  <!-- Flag -->
+  <polygon points="199,110 290,145 199,180" fill="#16a34a"/>
+
+  <!-- Ground mound -->
+  <ellipse cx="192" cy="390" rx="60" ry="18" fill="#15803d"/>
+
+  <!-- Clock circle -->
+  <circle cx="340" cy="330" r="80" fill="#1e293b" stroke="#16a34a" stroke-width="8"/>
+  <circle cx="340" cy="330" r="6" fill="#94a3b8"/>
+  <!-- Clock hour hand (pointing ~10 o'clock) -->
+  <line x1="340" y1="330" x2="313" y2="307" stroke="#f1f5f9" stroke-width="8" stroke-linecap="round"/>
+  <!-- Clock minute hand (pointing ~12 o'clock) -->
+  <line x1="340" y1="330" x2="340" y2="265" stroke="#16a34a" stroke-width="6" stroke-linecap="round"/>
+  <!-- Clock tick marks -->
+  <line x1="340" y1="258" x2="340" y2="270" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <line x1="340" y1="398" x2="340" y2="410" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <line x1="268" y1="330" x2="280" y2="330" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+  <line x1="408" y1="330" x2="420" y2="330" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+</svg>

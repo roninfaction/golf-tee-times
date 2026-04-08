@@ -24,18 +24,26 @@ export default function ProfilePage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { setLoading(false); return; }
+      if (!session) {
+        setForwarderToken("__NO_SESSION__");
+        setLoading(false);
+        return;
+      }
       fetch("/api/profile", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
         .then((r) => r.json())
         .then((data) => {
-          setDisplayName(data.display_name ?? "");
-          setForwarderToken(data.forwarder_token ?? "");
-          setEmail(data.email ?? "");
+          if (data.error) {
+            setForwarderToken(`__ERR:${data.error}__`);
+          } else {
+            setDisplayName(data.display_name ?? "");
+            setForwarderToken(data.forwarder_token ?? "__NO_TOKEN__");
+            setEmail(data.email ?? "");
+          }
           setLoading(false);
         })
-        .catch(() => setLoading(false));
+        .catch((e) => { setForwarderToken(`__FETCH_ERR:${e}__`); setLoading(false); });
     });
   }, []);
 

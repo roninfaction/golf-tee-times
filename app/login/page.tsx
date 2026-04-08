@@ -82,7 +82,7 @@ export default function LoginPage() {
               {loading ? "Sending…" : "Send code"}
             </button>
             <p className="text-slate-500 text-xs text-center">
-              No password needed. We&apos;ll email you a 6-digit code.
+              No password needed. We&apos;ll email you a sign-in code.
             </p>
           </form>
         ) : (
@@ -102,7 +102,7 @@ export default function LoginPage() {
                 inputMode="numeric"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="123456"
+                placeholder="12345678"
                 required
                 maxLength={8}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 text-base text-center tracking-widest text-xl"

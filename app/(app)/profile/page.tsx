@@ -32,14 +32,19 @@ export default function ProfilePage() {
       fetch("/api/profile", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.error) {
-            setForwarderToken(`__ERR:${data.error}__`);
-          } else {
-            setDisplayName(data.display_name ?? "");
-            setForwarderToken(data.forwarder_token ?? "__NO_TOKEN__");
-            setEmail(data.email ?? "");
+        .then(async (r) => {
+          const text = await r.text();
+          try {
+            const data = JSON.parse(text);
+            if (data.error) {
+              setForwarderToken(`__ERR:${data.error}__`);
+            } else {
+              setDisplayName(data.display_name ?? "");
+              setForwarderToken(data.forwarder_token ?? "__NO_TOKEN__");
+              setEmail(data.email ?? "");
+            }
+          } catch {
+            setForwarderToken(`__RAW:${text.slice(0, 120)}__`);
           }
           setLoading(false);
         })

@@ -1,0 +1,28 @@
+{
+  "name": "TeeUp",
+  "short_name": "TeeUp",
+  "description": "Golf tee time scheduler for your group",
+  "start_url": "/upcoming",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#15803d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

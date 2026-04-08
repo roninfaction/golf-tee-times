@@ -1,0 +1,10 @@
+name = "golf-tee-times-cron"
+main = "cron-worker/index.js"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Set these in the Cloudflare dashboard under Workers → golf-tee-times-cron → Settings → Variables
+# APP_URL = "https://golf-tee-times.pages.dev"
+# CRON_SECRET = "7e8ad2791438d239a710aed04ae5ecdf3c171fc37047fba6aaeb8929bbae069f"

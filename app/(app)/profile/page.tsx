@@ -52,7 +52,7 @@ export default function ProfilePage() {
               setEmail(data.email ?? "");
             }
           } catch {
-            setForwarderToken(`__RAW:${text.slice(0, 120)}__`);
+            setForwarderToken(`__STATUS:${r.status}_RAW:${text.slice(0, 80)}__`);
           }
           setLoading(false);
         })

@@ -15,57 +15,33 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   const forwardingEmail = forwarderToken
     ? `tee-${forwarderToken}@${EMAIL_FORWARD_DOMAIN}`
     : "";
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) {
-        setProfileLoading(false);
-        return;
-      }
-      setEmail(user.email ?? "");
-      supabase
-        .from("profiles")
-        .select("display_name, forwarder_token")
-        .eq("id", user.id)
-        .single()
-        .then(({ data, error }) => {
-          setProfileLoading(false);
-          if (data) {
-            setDisplayName(data.display_name ?? "");
-            setForwarderToken(data.forwarder_token ?? "");
-          } else if (error) {
-            // Profile doesn't exist yet — create it
-            supabase.from("profiles").insert({
-              id: user.id,
-              email: user.email ?? "",
-              display_name: (user.email ?? "").split("@")[0],
-            }).then(() => {
-              supabase.from("profiles").select("display_name, forwarder_token").eq("id", user.id).single().then(({ data }) => {
-                if (data) {
-                  setDisplayName(data.display_name ?? "");
-                  setForwarderToken(data.forwarder_token ?? "");
-                }
-              });
-            });
-          }
-        });
-    });
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        setDisplayName(data.display_name ?? "");
+        setForwarderToken(data.forwarder_token ?? "");
+        setEmail(data.email ?? "");
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from("profiles").update({ display_name: displayName }).eq("id", user.id);
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_name: displayName }),
+    });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -121,7 +97,7 @@ export default function ProfilePage() {
           Forward any golf course confirmation email to this address and TeeUp will
           automatically create the tee time for your group.
         </p>
-        {profileLoading ? (
+        {loading ? (
           <p className="text-slate-600 text-sm">Loading…</p>
         ) : forwardingEmail ? (
           <>

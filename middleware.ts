@@ -45,6 +45,7 @@ export async function middleware(request: NextRequest) {
     "/api/health",
     "/api/cron",
     "/api/guest-invites/accept",  // public endpoint
+    "/api/profile",               // uses Bearer token auth, not cookies
   ];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 

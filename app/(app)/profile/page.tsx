@@ -22,24 +22,35 @@ export default function ProfilePage() {
     : "";
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then((r) => r.json())
-      .then((data) => {
-        setDisplayName(data.display_name ?? "");
-        setForwarderToken(data.forwarder_token ?? "");
-        setEmail(data.email ?? "");
-        setLoading(false);
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { setLoading(false); return; }
+      fetch("/api/profile", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
       })
-      .catch(() => setLoading(false));
+        .then((r) => r.json())
+        .then((data) => {
+          setDisplayName(data.display_name ?? "");
+          setForwarderToken(data.forwarder_token ?? "");
+          setEmail(data.email ?? "");
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    });
   }, []);
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
     await fetch("/api/profile", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
       body: JSON.stringify({ display_name: displayName }),
     });
     setSaving(false);

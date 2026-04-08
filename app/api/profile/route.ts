@@ -1,15 +1,21 @@
-import { createServiceClient, createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+  const token = authHeader?.replace("Bearer ", "");
 
-  if (!user) {
+  if (!token) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const service = createServiceClient();
+  const { data: { user }, error: userError } = await service.auth.getUser(token);
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const { data, error } = await service
     .from("profiles")
     .select("display_name, forwarder_token, email")
@@ -34,15 +40,21 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authHeader = request.headers.get("Authorization");
+  const token = authHeader?.replace("Bearer ", "");
 
-  if (!user) {
+  if (!token) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const service = createServiceClient();
+  const { data: { user }, error: userError } = await service.auth.getUser(token);
+
+  if (userError || !user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const { display_name } = await request.json();
-  const service = createServiceClient();
   await service.from("profiles").update({ display_name }).eq("id", user.id);
   return NextResponse.json({ ok: true });
 }

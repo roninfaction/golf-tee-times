@@ -70,12 +70,6 @@ ${truncated}`;
     // Validate
     if (!parsed.course_name || !parsed.tee_date || !parsed.tee_time) return null;
 
-    // Validate date is in the future and within a year
-    const teeDate = new Date(`${parsed.tee_date}T${parsed.tee_time}`);
-    const now = new Date();
-    const oneYearFromNow = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
-    if (teeDate <= now || teeDate > oneYearFromNow) return null;
-
     // Normalize holes
     parsed.holes = parsed.holes === 9 ? 9 : 18;
 

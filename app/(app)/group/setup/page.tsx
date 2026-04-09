@@ -34,15 +34,11 @@ export default function GroupSetupPage() {
         body: JSON.stringify({ name: groupName }),
       });
 
+      const body = await res.json().catch(() => ({}));
       if (res.ok) {
         window.location.href = "/upcoming";
       } else {
-        let msg = `Server error (${res.status})`;
-        try {
-          const err = await res.json();
-          msg = err.error ?? msg;
-        } catch { /* non-JSON response */ }
-        setError(msg);
+        setError(`[${body.step ?? "?"}] ${body.error ?? `HTTP ${res.status}`}`);
       }
     } catch (err) {
       setError(`Failed: ${err instanceof Error ? err.message : String(err)}`);

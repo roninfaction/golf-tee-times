@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
+import { createClient } from "@/lib/supabase/browser";
 
 declare global {
   interface Window {
@@ -44,9 +45,14 @@ export function PushPrompt() {
       await window.OneSignal.User.pushSubscription.optIn();
       const playerId = window.OneSignal.User.pushSubscription.id;
       if (playerId) {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
         await fetch("/api/push/register", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token ?? ""}`,
+          },
           body: JSON.stringify({ playerId }),
         });
         localStorage.setItem("push_registered", "1");

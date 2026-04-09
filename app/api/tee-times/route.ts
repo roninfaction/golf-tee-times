@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 
-export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export async function GET(request: NextRequest) {
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: membership } = await supabase
+  const svc = createServiceClient();
+  const { data: membership } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", user.id)
@@ -15,7 +16,7 @@ export async function GET() {
 
   if (!membership) return NextResponse.json([]);
 
-  const { data, error } = await supabase
+  const { data, error } = await svc
     .from("tee_times")
     .select("*, rsvps(*), guest_invites(*)")
     .eq("group_id", membership.group_id)
@@ -27,8 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
@@ -38,8 +38,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "course_name and tee_datetime are required" }, { status: 400 });
   }
 
-  // Get user's group
-  const { data: membership } = await supabase
+  const svc = createServiceClient();
+
+  const { data: membership } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", user.id)
@@ -49,9 +50,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You are not in a group" }, { status: 400 });
   }
 
-  const svc = createServiceClient();
-
-  // Insert the tee time
   const { data: teeTime, error } = await svc
     .from("tee_times")
     .insert({
@@ -70,7 +68,6 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Get all group members
   const { data: members } = await svc
     .from("group_members")
     .select("user_id")
@@ -78,16 +75,14 @@ export async function POST(request: NextRequest) {
 
   const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id);
 
-  // Auto-create RSVPs: creator = accepted, everyone else = pending
-  const rsvpInserts = memberIds.map((uid: string) => ({
-    tee_time_id: teeTime.id,
-    user_id: uid,
-    status: uid === user.id ? "accepted" : "pending",
-  }));
+  await svc.from("rsvps").insert(
+    memberIds.map((uid: string) => ({
+      tee_time_id: teeTime.id,
+      user_id: uid,
+      status: uid === user.id ? "accepted" : "pending",
+    }))
+  );
 
-  await svc.from("rsvps").insert(rsvpInserts);
-
-  // Send push notifications to all group members except creator
   const otherMemberIds = memberIds.filter((id: string) => id !== user.id);
   if (otherMemberIds.length > 0) {
     const { data: profiles } = await svc
@@ -104,7 +99,6 @@ export async function POST(request: NextRequest) {
       const teeDate = new Date(tee_datetime);
       const dateStr = teeDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
       const timeStr = teeDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-
       await sendPush({
         playerIds,
         title: "New tee time! ⛳",

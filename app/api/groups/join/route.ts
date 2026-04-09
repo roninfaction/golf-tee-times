@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { getUserFromBearer } from "@/lib/auth-bearer";
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { groupId } = await request.json();
   if (!groupId) return NextResponse.json({ error: "groupId required" }, { status: 400 });
 
-  // Check if user is already in any group
-  const { data: existing } = await supabase
+  const svc = createServiceClient();
+
+  const { data: existing } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", user.id)
@@ -20,8 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You are already in a group" }, { status: 400 });
   }
 
-  // Verify the group exists
-  const { data: group } = await supabase
+  const { data: group } = await svc
     .from("groups")
     .select("id")
     .eq("id", groupId)
@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
 
   if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
 
-  const svc = createServiceClient();
   const { error } = await svc
     .from("group_members")
     .insert({ group_id: groupId, user_id: user.id, role: "member" });

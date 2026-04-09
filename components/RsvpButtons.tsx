@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, X, Clock } from "lucide-react";
 import { clsx } from "clsx";
+import { createClient } from "@/lib/supabase/browser";
 
 type RsvpStatus = "pending" | "accepted" | "declined";
 
@@ -22,9 +23,15 @@ export function RsvpButtons({
     if (newStatus === status || loading) return;
     setLoading(true);
 
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/rsvps", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
       body: JSON.stringify({ teeTimeId, status: newStatus }),
     });
 

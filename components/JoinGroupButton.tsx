@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 
 export function JoinGroupButton({ groupId, groupName }: { groupId: string; groupName: string }) {
   const router = useRouter();
@@ -10,9 +11,14 @@ export function JoinGroupButton({ groupId, groupName }: { groupId: string; group
 
   async function join() {
     setLoading(true);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch("/api/groups/join", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
       body: JSON.stringify({ groupId }),
     });
     setLoading(false);

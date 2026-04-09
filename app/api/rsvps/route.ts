@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { teeTimeId, status } = await request.json();
@@ -26,7 +26,6 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Notify tee time creator of RSVP change
   const { data: teeTime } = await svc
     .from("tee_times")
     .select("created_by, course_name, tee_datetime")
@@ -36,7 +35,7 @@ export async function POST(request: NextRequest) {
   if (teeTime && teeTime.created_by && teeTime.created_by !== user.id) {
     const { data: creator } = await svc
       .from("profiles")
-      .select("onesignal_player_id, display_name")
+      .select("onesignal_player_id")
       .eq("id", teeTime.created_by)
       .single();
 

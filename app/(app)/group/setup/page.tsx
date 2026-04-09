@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/browser";
 
 export default function GroupSetupPage() {
   const router = useRouter();
@@ -16,9 +17,15 @@ export default function GroupSetupPage() {
     setLoading(true);
     setError("");
 
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/groups", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
       body: JSON.stringify({ name: groupName }),
     });
 

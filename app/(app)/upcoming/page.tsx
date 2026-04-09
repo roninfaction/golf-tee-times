@@ -68,7 +68,7 @@ export default async function UpcomingPage() {
       guest_invites(status)
     `)
     .eq("group_id", groupId)
-    .gte("tee_datetime", new Date().toISOString())
+    .gte("tee_datetime", new Date().toISOString().split("T")[0])
     .order("tee_datetime", { ascending: true })
     .limit(20);
 

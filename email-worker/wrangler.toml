@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [email]
 routing = [
-  { pattern = "*@closecurtain.com", action = "forward" }
+  { pattern = "*@golfpack.app", action = "forward" }
 ]
 
 # Set these in Cloudflare dashboard → Workers → golf-tee-times-email → Settings → Variables

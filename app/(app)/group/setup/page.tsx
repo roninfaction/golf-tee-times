@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
 
 export default function GroupSetupPage() {
-  const router = useRouter();
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +35,7 @@ export default function GroupSetupPage() {
       });
 
       if (res.ok) {
-        router.push("/group");
+        window.location.href = "/upcoming";
       } else {
         let msg = `Server error (${res.status})`;
         try {

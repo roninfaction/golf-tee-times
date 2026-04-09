@@ -8,6 +8,6 @@ routing = [
   { pattern = "*@golfpack.app", action = "forward" }
 ]
 
-# Set these in Cloudflare dashboard → Workers → golf-tee-times-email → Settings → Variables
-# APP_WEBHOOK_URL = "https://golf-tee-times.pages.dev/api/webhooks/email-inbound"
-# WEBHOOK_SECRET = "your-secret"
+[vars]
+APP_WEBHOOK_URL = "https://golfpack.app/api/webhooks/email-inbound"
+# WEBHOOK_SECRET is set as a Secret in Cloudflare dashboard (not here — never commit secrets)

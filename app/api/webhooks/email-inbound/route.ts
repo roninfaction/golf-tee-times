@@ -4,12 +4,6 @@ import { parseTeeTimeEmail } from "@/lib/email-parser";
 import { sendPush } from "@/lib/onesignal";
 
 export async function POST(request: NextRequest) {
-  // Validate webhook secret
-  const secret = request.headers.get("x-webhook-secret");
-  const expectedSecret = process.env.WEBHOOK_SECRET ?? process.env.CRON_SECRET;
-  if (expectedSecret && secret !== expectedSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
 
   let payload: Record<string, unknown>;
   try {

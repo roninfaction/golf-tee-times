@@ -23,6 +23,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You are already in a group" }, { status: 400 });
   }
 
+  // Ensure profile exists (required for group_members FK)
+  const { data: existingProfile } = await svc
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!existingProfile) {
+    await svc.from("profiles").insert({
+      id: user.id,
+      email: user.email ?? "",
+      display_name: (user.email ?? "").split("@")[0],
+    });
+  }
+
   // Create the group
   const { data: group, error: groupError } = await svc
     .from("groups")

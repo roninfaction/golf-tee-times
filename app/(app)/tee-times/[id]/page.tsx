@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { formatTeeDateLong, formatTeeTime } from "@/lib/format";
 import { RsvpButtons } from "@/components/RsvpButtons";
 import { InviteGuestButton } from "@/components/InviteGuestButton";
+import { DeleteTeeTimeButton } from "@/components/DeleteTeeTimeButton";
 import { ChevronLeft, MapPin, Clock, Flag, Users, Hash, Mail } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
@@ -159,6 +160,11 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
       {!isPast && openSpots > 0 && (
         <InviteGuestButton teeTimeId={teeTime.id} openSpots={openSpots} />
       )}
+
+      {/* Delete */}
+      <div className="mt-6 pt-4 border-t border-slate-800">
+        <DeleteTeeTimeButton teeTimeId={teeTime.id} />
+      </div>
     </div>
   );
 }

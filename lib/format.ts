@@ -61,14 +61,14 @@ export function buildIcsContent({
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//TeeUp//Golf Tee Time//EN",
+    "PRODID:-//GolfPack//Golf Tee Time//EN",
     "BEGIN:VEVENT",
     `DTSTART:${fmt(start)}`,
     `DTEND:${fmt(end)}`,
     `SUMMARY:${summary}`,
     `DESCRIPTION:${description}`,
     `LOCATION:${location}`,
-    `UID:${Date.now()}@teeup`,
+    `UID:${Date.now()}@golfpack`,
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");

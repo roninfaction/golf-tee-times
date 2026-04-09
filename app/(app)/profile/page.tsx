@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { Copy, Check, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const EMAIL_FORWARD_DOMAIN = process.env.NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN ?? "tee.yourdomain.com";
+const EMAIL_FORWARD_DOMAIN = process.env.NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN ?? "golfpack.app";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -24,39 +24,18 @@ export default function ProfilePage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        // Try refreshing the session first
-        supabase.auth.refreshSession().then(({ data: { session: refreshed } }) => {
-          if (!refreshed) {
-            setForwarderToken("__NO_SESSION_EVEN_AFTER_REFRESH__");
-            setLoading(false);
-          } else {
-            setForwarderToken(`__REFRESHED_OK_token_starts:${refreshed.access_token.slice(0,20)}__`);
-            setLoading(false);
-          }
-        });
-        return;
-      }
+      if (!session) { setLoading(false); return; }
       fetch("/api/profile", {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
-        .then(async (r) => {
-          const text = await r.text();
-          try {
-            const data = JSON.parse(text);
-            if (data.error) {
-              setForwarderToken(`__ERR:${data.error}__`);
-            } else {
-              setDisplayName(data.display_name ?? "");
-              setForwarderToken(data.forwarder_token ?? "__NO_TOKEN__");
-              setEmail(data.email ?? "");
-            }
-          } catch {
-            setForwarderToken(`__STATUS:${r.status}_RAW:${text.slice(0, 80)}__`);
-          }
+        .then((r) => r.json())
+        .then((data) => {
+          setDisplayName(data.display_name ?? "");
+          setForwarderToken(data.forwarder_token ?? "");
+          setEmail(data.email ?? "");
           setLoading(false);
         })
-        .catch((e) => { setForwarderToken(`__FETCH_ERR:${e}__`); setLoading(false); });
+        .catch(() => setLoading(false));
     });
   }, []);
 
@@ -95,7 +74,6 @@ export default function ProfilePage() {
     <div className="px-4 pt-6">
       <h1 className="text-2xl font-bold text-white mb-6">Profile</h1>
 
-      {/* Display name */}
       <form onSubmit={saveProfile} className="mb-6">
         <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4">
           <label className="block text-xs text-slate-500 uppercase tracking-wide mb-3">
@@ -120,13 +98,12 @@ export default function ProfilePage() {
         </div>
       </form>
 
-      {/* Email forwarding */}
       <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 mb-6">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">
           📧 Email forwarding address
         </p>
         <p className="text-slate-400 text-sm mb-3 leading-relaxed">
-          Forward any golf course confirmation email to this address and TeeUp will
+          Forward any golf course confirmation email to this address and GolfPack will
           automatically create the tee time for your group.
         </p>
         {loading ? (
@@ -145,11 +122,10 @@ export default function ProfilePage() {
             </button>
           </>
         ) : (
-          <p className="text-slate-500 text-sm">No forwarding address found.</p>
+          <p className="text-slate-500 text-sm">No forwarding address available.</p>
         )}
       </div>
 
-      {/* Sign out */}
       <button
         onClick={signOut}
         className="flex items-center gap-2 text-slate-500 hover:text-red-400 text-sm transition-colors"

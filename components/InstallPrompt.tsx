@@ -29,7 +29,7 @@ export function InstallPrompt() {
       <div className="flex items-start gap-3">
         <div className="text-2xl">📲</div>
         <div className="flex-1">
-          <p className="text-white font-semibold text-sm">Install TeeUp</p>
+          <p className="text-white font-semibold text-sm">Install GolfPack</p>
           <p className="text-slate-400 text-xs mt-1 leading-relaxed">
             Tap <strong className="text-slate-300">Share</strong> then{" "}
             <strong className="text-slate-300">Add to Home Screen</strong> to get

@@ -52,7 +52,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6">
       <div className="mb-10 text-center">
         <div className="text-5xl mb-3">⛳</div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">TeeUp</h1>
+        <h1 className="text-3xl font-bold text-white tracking-tight">GolfPack</h1>
         <p className="text-slate-400 mt-2 text-sm">Golf scheduling for your group</p>
       </div>
 
@@ -131,7 +131,7 @@ export default function LoginPage() {
             📱 iPhone users
           </p>
           <p className="text-slate-400 text-xs leading-relaxed">
-            To get push notifications, install TeeUp to your home screen:{" "}
+            To get push notifications, install GolfPack to your home screen:{" "}
             <strong className="text-slate-300">Safari → Share → Add to Home Screen</strong>
           </p>
         </div>

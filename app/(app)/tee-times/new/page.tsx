@@ -185,7 +185,7 @@ export default function NewTeeTiePage() {
       <div className="mt-6 p-4 bg-slate-900 rounded-xl border border-slate-800">
         <p className="text-slate-400 text-xs leading-relaxed">
           💡 <strong className="text-slate-300">Tip:</strong> Got a confirmation email from the course?
-          Forward it to your personal TeeUp address in your{" "}
+          Forward it to your personal GolfPack address in your{" "}
           <a href="/profile" className="text-green-400 underline">profile</a> and it&apos;ll
           auto-create the tee time for you.
         </p>

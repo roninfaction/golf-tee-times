@@ -71,7 +71,7 @@ export default async function GroupPage() {
           👥 Invite to group
         </p>
         <p className="text-slate-400 text-sm mb-3">
-          Share this link so others can join your group in TeeUp.
+          Share this link so others can join your group in GolfPack.
         </p>
         <div className="bg-slate-800 rounded-xl px-3 py-2.5 mb-3">
           <p className="text-slate-300 text-xs font-mono break-all">{inviteUrl}</p>

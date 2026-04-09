@@ -5,13 +5,13 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "TeeUp",
+  title: "GolfPack",
   description: "Golf tee time scheduler for your group",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "TeeUp",
+    title: "GolfPack",
   },
 };
 

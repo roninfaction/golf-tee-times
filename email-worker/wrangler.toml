@@ -1,0 +1,13 @@
+name = "golf-tee-times-email"
+main = "index.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[email]
+routing = [
+  { pattern = "*@closecurtain.com", action = "forward" }
+]
+
+# Set these in Cloudflare dashboard → Workers → golf-tee-times-email → Settings → Variables
+# APP_WEBHOOK_URL = "https://golf-tee-times.pages.dev/api/webhooks/email-inbound"
+# WEBHOOK_SECRET = "your-secret"

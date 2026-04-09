@@ -48,7 +48,7 @@ export default async function InvitePage({ params }: PageProps) {
       <div className="text-5xl mb-4">⛳</div>
       <h1 className="text-2xl font-bold text-white mb-2">Join {group.name}</h1>
       <p className="text-slate-400 text-sm mb-8 max-w-xs">
-        You&apos;ve been invited to join this golf group on TeeUp.
+        You&apos;ve been invited to join this golf group on GolfPack.
       </p>
       <JoinGroupButton groupId={group.id} groupName={group.name} />
     </div>

@@ -2,26 +2,52 @@
   <!-- Background -->
   <rect width="512" height="512" rx="100" fill="#0f172a"/>
 
-  <!-- Club shafts (behind rim) -->
-  <line x1="214" y1="193" x2="192" y2="82" stroke="#94a3b8" stroke-width="13" stroke-linecap="round"/>
-  <line x1="256" y1="189" x2="256" y2="76" stroke="#94a3b8" stroke-width="13" stroke-linecap="round"/>
-  <line x1="298" y1="193" x2="320" y2="82" stroke="#94a3b8" stroke-width="13" stroke-linecap="round"/>
+  <!-- CLUBS drawn first — bag body will cover their bottoms so they appear to go inside -->
 
-  <!-- Bag body -->
-  <rect x="154" y="193" width="204" height="228" rx="28" fill="#1e293b" stroke="#16a34a" stroke-width="6"/>
+  <!-- Left shaft (angled left) -->
+  <line x1="200" y1="380" x2="182" y2="78" stroke="#94a3b8" stroke-width="11" stroke-linecap="round"/>
+  <!-- Left iron blade — perpendicular to shaft -->
+  <line x1="164" y1="80" x2="200" y2="76" stroke="#f1f5f9" stroke-width="13" stroke-linecap="round"/>
+  <!-- Left hosel dot -->
+  <circle cx="182" cy="78" r="7" fill="#cbd5e1"/>
 
-  <!-- Top rim -->
-  <ellipse cx="256" cy="193" rx="102" ry="24" fill="#334155" stroke="#16a34a" stroke-width="6"/>
+  <!-- Middle shaft (straight up) -->
+  <line x1="256" y1="380" x2="256" y2="72" stroke="#94a3b8" stroke-width="11" stroke-linecap="round"/>
+  <!-- Middle iron blade — horizontal -->
+  <line x1="238" y1="72" x2="274" y2="72" stroke="#f1f5f9" stroke-width="13" stroke-linecap="round"/>
+  <!-- Middle hosel dot -->
+  <circle cx="256" cy="72" r="7" fill="#cbd5e1"/>
+
+  <!-- Right shaft (angled right) -->
+  <line x1="312" y1="380" x2="330" y2="78" stroke="#94a3b8" stroke-width="11" stroke-linecap="round"/>
+  <!-- Right iron blade — perpendicular to shaft -->
+  <line x1="312" y1="76" x2="348" y2="80" stroke="#f1f5f9" stroke-width="13" stroke-linecap="round"/>
+  <!-- Right hosel dot -->
+  <circle cx="330" cy="78" r="7" fill="#cbd5e1"/>
+
+  <!-- BAG BODY — covers shaft bottoms to create "inside bag" illusion -->
+  <rect x="150" y="196" width="212" height="222" rx="30" fill="#1e293b" stroke="#16a34a" stroke-width="5"/>
+
+  <!-- Bag center seam (subtle depth detail) -->
+  <line x1="256" y1="210" x2="256" y2="418" stroke="#243348" stroke-width="3" stroke-dasharray="8,10"/>
 
   <!-- Shoulder strap -->
-  <path d="M 170 225 C 105 308 128 388 160 432" stroke="#16a34a" stroke-width="15" fill="none" stroke-linecap="round"/>
+  <path d="M 164 230 C 96 318 120 400 154 440" stroke="#15803d" stroke-width="15" fill="none" stroke-linecap="round"/>
+
+  <!-- BAG RIM — drawn over shafts at opening to sell the "inside" effect -->
+  <ellipse cx="256" cy="196" rx="106" ry="27" fill="#253547" stroke="#16a34a" stroke-width="5"/>
+  <ellipse cx="256" cy="196" rx="68" ry="13" fill="#1c2e3e" opacity="0.9"/>
+
+  <!-- GP monogram on bag -->
+  <text x="256" y="288"
+        text-anchor="middle"
+        font-family="Arial Black, Arial, sans-serif"
+        font-weight="900"
+        font-size="70"
+        fill="#22c55e">GP</text>
 
   <!-- Front pocket -->
-  <rect x="180" y="312" width="152" height="76" rx="16" fill="#263548" stroke="#374151" stroke-width="3"/>
-
-  <!-- Pocket zipper line -->
-  <path d="M 198 349 Q 256 338 314 349" stroke="#4b5563" stroke-width="4" fill="none" stroke-linecap="round"/>
-
-  <!-- Bag highlight (subtle top sheen) -->
-  <ellipse cx="256" cy="193" rx="66" ry="10" fill="#475569" opacity="0.5"/>
+  <rect x="182" y="334" width="148" height="56" rx="14" fill="#243044" stroke="#334155" stroke-width="3"/>
+  <!-- Pocket zip -->
+  <path d="M 200 361 Q 256 351 312 361" stroke="#475569" stroke-width="3.5" fill="none" stroke-linecap="round"/>
 </svg>

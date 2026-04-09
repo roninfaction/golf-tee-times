@@ -17,24 +17,39 @@ export default function GroupSetupPage() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
 
-    const res = await fetch("/api/groups", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token ?? ""}`,
-      },
-      body: JSON.stringify({ name: groupName }),
-    });
+      if (!session) {
+        setError("Session expired — please sign out and sign in again.");
+        setLoading(false);
+        return;
+      }
 
-    setLoading(false);
-    if (res.ok) {
-      router.push("/group");
-    } else {
-      const err = await res.json();
-      setError(err.error ?? "Something went wrong");
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ name: groupName }),
+      });
+
+      if (res.ok) {
+        router.push("/group");
+      } else {
+        let msg = `Server error (${res.status})`;
+        try {
+          const err = await res.json();
+          msg = err.error ?? msg;
+        } catch { /* non-JSON response */ }
+        setError(msg);
+      }
+    } catch (err) {
+      setError(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
     }
   }
 

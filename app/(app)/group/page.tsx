@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CopyInviteButton } from "@/components/CopyInviteButton";
@@ -11,7 +11,9 @@ export default async function GroupPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: membership } = await supabase
+  const svc = createServiceClient();
+
+  const { data: membership } = await svc
     .from("group_members")
     .select("group_id, role, group:groups(id, name, invite_code)")
     .eq("user_id", user.id)
@@ -31,7 +33,7 @@ export default async function GroupPage() {
   const group = membership.group as unknown as { id: string; name: string; invite_code: string };
   const inviteUrl = `${APP_URL}/invite/${group.invite_code}`;
 
-  const { data: members } = await supabase
+  const { data: members } = await svc
     .from("group_members")
     .select("*, profile:profiles(id, display_name, email)")
     .eq("group_id", group.id)

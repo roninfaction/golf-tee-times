@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { formatTeeDateLong, formatTeeTime } from "@/lib/format";
 import { RsvpButtons } from "@/components/RsvpButtons";
@@ -23,7 +23,9 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: tt } = await supabase
+  const svc = createServiceClient();
+
+  const { data: tt } = await svc
     .from("tee_times")
     .select(`
       *,

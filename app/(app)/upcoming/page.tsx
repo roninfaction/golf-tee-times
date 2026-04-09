@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatTeeDate, formatTeeTime, formatDaysUntil } from "@/lib/format";
@@ -29,8 +29,10 @@ export default async function UpcomingPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const svc = createServiceClient();
+
   // Get user's group
-  const { data: membership } = await supabase
+  const { data: membership } = await svc
     .from("group_members")
     .select("group_id, group:groups(id, name)")
     .eq("user_id", user.id)
@@ -58,7 +60,7 @@ export default async function UpcomingPage() {
   }
 
   // Fetch upcoming tee times
-  const { data: teeTimes } = await supabase
+  const { data: teeTimes } = await svc
     .from("tee_times")
     .select(`
       *,

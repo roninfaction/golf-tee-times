@@ -4,7 +4,6 @@ import { parseTeeTimeEmail } from "@/lib/email-parser";
 import { sendPush } from "@/lib/onesignal";
 
 export async function POST(request: NextRequest) {
-
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
@@ -12,51 +11,55 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Extract the To: address to identify the user by their forwarder token
-  // Resend sends headers as an object; the To address is in `to` field
   const toAddress: string = (payload.to as string) ?? "";
-  // Expected format: tee-{token}@tee.yourdomain.com
+  console.log("[webhook] to:", toAddress);
+
   const tokenMatch = toAddress.match(/tee-([a-f0-9]+)@/i);
   if (!tokenMatch) {
+    console.log("[webhook] no token match in:", toAddress);
     return NextResponse.json({ error: "No forwarder token in To address" }, { status: 400 });
   }
   const forwarderToken = tokenMatch[1];
+  console.log("[webhook] token:", forwarderToken);
 
   const svc = createServiceClient();
 
-  // Look up the user by their forwarder token
-  const { data: profile } = await svc
+  const { data: profile, error: profileError } = await svc
     .from("profiles")
     .select("id, display_name")
     .eq("forwarder_token", forwarderToken)
     .maybeSingle();
 
+  console.log("[webhook] profile:", profile?.id ?? null, "profileError:", profileError?.message ?? null);
+
   if (!profile) {
-    return NextResponse.json({ error: "Unknown forwarder token" }, { status: 200 }); // 200 so Resend doesn't retry
+    return NextResponse.json({ error: "Unknown forwarder token", token: forwarderToken }, { status: 200 });
   }
 
-  // Get user's group
-  const { data: membership } = await svc
+  const { data: membership, error: memberError } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", profile.id)
     .maybeSingle();
 
+  console.log("[webhook] membership:", membership?.group_id ?? null, "memberError:", memberError?.message ?? null);
+
   if (!membership) {
     return NextResponse.json({ error: "User has no group" }, { status: 200 });
   }
 
-  // Extract email body (prefer plain text)
   const textBody = (payload.text as string) ?? "";
   const htmlBody = (payload.html as string) ?? "";
   const emailBody = textBody || htmlBody;
   const isHtml = !textBody && !!htmlBody;
 
-  // Parse with GPT-4o
+  console.log("[webhook] emailBody length:", emailBody.length, "isHtml:", isHtml);
+
   const parsed = await parseTeeTimeEmail(emailBody, isHtml);
+  console.log("[webhook] parsed:", JSON.stringify(parsed));
 
   if (!parsed) {
-    // Parsing failed — notify user to add manually
+    console.log("[webhook] parse failed");
     const { data: userProfile } = await svc
       .from("profiles")
       .select("onesignal_player_id")
@@ -73,10 +76,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, parsed: false });
   }
 
-  // Build the full datetime string
   const tee_datetime = `${parsed.tee_date}T${parsed.tee_time}:00`;
+  console.log("[webhook] inserting tee time:", tee_datetime);
 
-  // Insert the tee time
   const { data: teeTime, error: insertError } = await svc
     .from("tee_times")
     .insert({
@@ -94,11 +96,12 @@ export async function POST(request: NextRequest) {
     .select()
     .single();
 
+  console.log("[webhook] insertError:", insertError?.message ?? null, "teeTimeId:", teeTime?.id ?? null);
+
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  // Auto-create RSVPs
   const { data: members } = await svc
     .from("group_members")
     .select("user_id")
@@ -114,7 +117,6 @@ export async function POST(request: NextRequest) {
     }))
   );
 
-  // Push notify all group members
   const { data: profiles } = await svc
     .from("profiles")
     .select("onesignal_player_id")
@@ -129,7 +131,6 @@ export async function POST(request: NextRequest) {
     const teeDate = new Date(tee_datetime);
     const dateStr = teeDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
     const timeStr = teeDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-
     await sendPush({
       playerIds,
       title: "New tee time added! ⛳",

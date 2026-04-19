@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await service
       .from("profiles")
-      .select("display_name, forwarder_token, email")
+      .select("display_name, forwarder_token, email, push_subscription")
       .eq("id", user.id)
       .single();
 
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
       });
       const { data: newData } = await service
         .from("profiles")
-        .select("display_name, forwarder_token, email")
+        .select("display_name, forwarder_token, email, push_subscription")
         .eq("id", user.id)
         .single();
       return NextResponse.json(newData ?? {});
@@ -65,7 +65,11 @@ export async function PATCH(request: Request) {
     }
 
     const { display_name } = await request.json();
-    await service.from("profiles").update({ display_name }).eq("id", user.id);
+    await service.from("profiles").upsert({
+      id: user.id,
+      email: user.email ?? "",
+      display_name,
+    });
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     return NextResponse.json({ error: `crashed:${e instanceof Error ? e.message : String(e)}` }, { status: 500 });

@@ -29,6 +29,13 @@ export async function POST(request: NextRequest) {
 
   if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
 
+  // Ensure profile exists before inserting group_member (FK requirement)
+  await svc.from("profiles").upsert({
+    id: user.id,
+    email: user.email ?? "",
+    display_name: (user.email ?? "").split("@")[0],
+  }, { onConflict: "id", ignoreDuplicates: true });
+
   const { error } = await svc
     .from("group_members")
     .insert({ group_id: groupId, user_id: user.id, role: "member" });

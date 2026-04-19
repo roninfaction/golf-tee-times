@@ -3,6 +3,7 @@
   "short_name": "GolfPack",
   "description": "Golf tee time scheduler for your group",
   "start_url": "/upcoming",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#15803d",

@@ -21,20 +21,18 @@ export function DeleteTeeTimeButton({ teeTimeId }: { teeTimeId: string }) {
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-3">
-        <span className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>Delete this tee time?</span>
+      <div className="flex items-center gap-2">
+        <span className="text-slate-400 text-sm">Delete this tee time?</span>
         <button
           onClick={handleDelete}
           disabled={loading}
-          className="text-sm font-semibold"
-          style={{ color: "#FF453A", opacity: loading ? 0.5 : 1 }}
+          className="text-red-400 text-sm font-semibold hover:text-red-300 disabled:opacity-50"
         >
-          {loading ? "Deleting…" : "Delete"}
+          {loading ? "Deleting…" : "Yes, delete"}
         </button>
         <button
           onClick={() => setConfirming(false)}
-          className="text-sm"
-          style={{ color: "rgba(255,255,255,0.35)" }}
+          className="text-slate-500 text-sm hover:text-slate-300"
         >
           Cancel
         </button>
@@ -45,11 +43,10 @@ export function DeleteTeeTimeButton({ teeTimeId }: { teeTimeId: string }) {
   return (
     <button
       onClick={() => setConfirming(true)}
-      className="flex items-center gap-1.5 text-sm"
-      style={{ color: "rgba(255,69,58,0.6)" }}
+      className="flex items-center gap-1.5 text-slate-600 hover:text-red-400 text-sm transition-colors"
     >
       <Trash2 size={14} />
-      Delete tee time
+      Delete
     </button>
   );
 }

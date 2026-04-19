@@ -6,15 +6,11 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
 
-const GOLD = "#C9A84C";
-const CARD_BG = "rgba(255,255,255,0.055)";
-const CARD_BORDER = "rgba(80,200,110,0.16)";
-const DIVIDER = "rgba(80,200,110,0.10)";
-
-export default function NewTeeTimePage() {
+export default function NewTeeTiePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   const [courseName, setCourseName] = useState("");
   const [teeDate, setTeeDate] = useState("");
   const [teeTime, setTeeTime] = useState("08:00");
@@ -27,20 +23,26 @@ export default function NewTeeTimePage() {
     e.preventDefault();
     setLoading(true);
     setError("");
+
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/tee-times", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token ?? ""}`,
+      },
       body: JSON.stringify({
         course_name: courseName,
-        tee_datetime: new Date(`${teeDate}T${teeTime}:00`).toISOString(),
+        tee_datetime: `${teeDate}T${teeTime}:00`,
         holes,
         max_players: maxPlayers,
         notes: notes || null,
         confirmation_number: confirmationNumber || null,
       }),
     });
+
     setLoading(false);
     if (res.ok) {
       const data = await res.json();
@@ -51,79 +53,74 @@ export default function NewTeeTimePage() {
     }
   }
 
+  // Default tee date to tomorrow
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDate = tomorrow.toISOString().split("T")[0];
 
-  const fieldStyle = "w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20";
-
   return (
-    <div className="min-h-screen pb-52">
+    <div className="px-4 pt-6">
       {/* Header */}
-      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-        <Link href="/upcoming" style={{ color: "#30D158" }} className="flex items-center gap-0.5 text-sm font-medium">
-          <ChevronLeft size={18} strokeWidth={2} />
-          Cancel
+      <div className="flex items-center gap-3 mb-6">
+        <Link href="/upcoming" className="text-slate-400 hover:text-white p-1 -ml-1">
+          <ChevronLeft size={24} />
         </Link>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Tee Time</h1>
+        <h1 className="text-xl font-bold text-white">Add Tee Time</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="px-4 pt-6 space-y-6">
-        {/* Course */}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Course name */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Course</p>
-          <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-            <input
-              type="text"
-              value={courseName}
-              onChange={(e) => setCourseName(e.target.value)}
-              placeholder="Pine Valley Golf Club"
-              required
-              autoFocus
-              className={fieldStyle}
-            />
-          </div>
+          <label className="block text-sm text-slate-400 mb-1.5">Course name *</label>
+          <input
+            type="text"
+            value={courseName}
+            onChange={(e) => setCourseName(e.target.value)}
+            placeholder="Pine Valley Golf Club"
+            required
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+          />
         </div>
 
         {/* Date and time */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Date & Time</p>
-          <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-slate-400 mb-1.5">Date *</label>
             <input
               type="date"
               value={teeDate}
               onChange={(e) => setTeeDate(e.target.value)}
               min={minDate}
               required
-              className={fieldStyle}
-              style={{ borderBottom: `0.5px solid ${DIVIDER}`, colorScheme: "dark" }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 appearance-none"
             />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-1.5">Tee time *</label>
             <input
               type="time"
               value={teeTime}
               onChange={(e) => setTeeTime(e.target.value)}
               required
-              className={fieldStyle}
-              style={{ colorScheme: "dark" }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
             />
           </div>
         </div>
 
-        {/* Holes */}
+        {/* Holes toggle */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Holes</p>
-          <div className="flex gap-3">
+          <label className="block text-sm text-slate-400 mb-1.5">Holes</label>
+          <div className="flex gap-2">
             {([18, 9] as const).map((h) => (
               <button
                 key={h}
                 type="button"
                 onClick={() => setHoles(h)}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
-                style={{
-                  background: holes === h ? "#30D158" : CARD_BG,
-                  color: holes === h ? "#000" : "rgba(255,255,255,0.5)",
-                  border: holes === h ? "none" : `0.5px solid ${CARD_BORDER}`,
-                }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                  holes === h
+                    ? "bg-green-600 text-white"
+                    : "bg-slate-900 border border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}
               >
                 {h} holes
               </button>
@@ -133,19 +130,18 @@ export default function NewTeeTimePage() {
 
         {/* Max players */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Max players</p>
-          <div className="flex gap-3">
+          <label className="block text-sm text-slate-400 mb-1.5">Max players</label>
+          <div className="flex gap-2">
             {[2, 3, 4].map((n) => (
               <button
                 key={n}
                 type="button"
                 onClick={() => setMaxPlayers(n)}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
-                style={{
-                  background: maxPlayers === n ? "#30D158" : CARD_BG,
-                  color: maxPlayers === n ? "#000" : "rgba(255,255,255,0.5)",
-                  border: maxPlayers === n ? "none" : `0.5px solid ${CARD_BORDER}`,
-                }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                  maxPlayers === n
+                    ? "bg-green-600 text-white"
+                    : "bg-slate-900 border border-slate-700 text-slate-400 hover:border-slate-600"
+                }`}
               >
                 {n}
               </button>
@@ -153,46 +149,54 @@ export default function NewTeeTimePage() {
           </div>
         </div>
 
-        {/* Optional fields */}
+        {/* Confirmation number (optional) */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
-            Details <span style={{ color: "rgba(255,255,255,0.2)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span>
-          </p>
-          <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-            <input
-              type="text"
-              value={confirmationNumber}
-              onChange={(e) => setConfirmationNumber(e.target.value)}
-              placeholder="Confirmation number"
-              className={fieldStyle}
-              style={{ borderBottom: `0.5px solid ${DIVIDER}` }}
-            />
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notes (cart included, check in early…)"
-              rows={2}
-              className={`${fieldStyle} resize-none`}
-            />
-          </div>
+          <label className="block text-sm text-slate-400 mb-1.5">
+            Confirmation # <span className="text-slate-600">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={confirmationNumber}
+            onChange={(e) => setConfirmationNumber(e.target.value)}
+            placeholder="GN-12345"
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
+          />
         </div>
 
-        {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
+        {/* Notes (optional) */}
+        <div>
+          <label className="block text-sm text-slate-400 mb-1.5">
+            Notes <span className="text-slate-600">(optional)</span>
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Cart included, check in 30 min early…"
+            rows={2}
+            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600 resize-none"
+          />
+        </div>
+
+        {error && <p className="text-red-400 text-sm">{error}</p>}
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-4 rounded-2xl text-base font-semibold text-black transition-opacity"
-          style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}
+          className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl text-base transition-colors mt-2"
         >
-          {loading ? "Adding…" : "Add Tee Time"}
+          {loading ? "Creating…" : "Add tee time"}
         </button>
-
-        <p className="text-xs text-center pb-2" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Got a confirmation email? Forward it to your GolfPack address in{" "}
-          <a href="/profile" style={{ color: GOLD }}>Profile</a> instead.
-        </p>
       </form>
+
+      {/* Email forward tip */}
+      <div className="mt-6 p-4 bg-slate-900 rounded-xl border border-slate-800">
+        <p className="text-slate-400 text-xs leading-relaxed">
+          💡 <strong className="text-slate-300">Tip:</strong> Got a confirmation email from the course?
+          Forward it to your personal GolfPack address in your{" "}
+          <a href="/profile" className="text-green-400 underline">profile</a> and it&apos;ll
+          auto-create the tee time for you.
+        </p>
+      </div>
     </div>
   );
 }

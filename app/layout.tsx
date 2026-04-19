@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "GolfPack",
-  description: "Golf tee time scheduling for your group",
+  description: "Golf tee time scheduler for your group",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -16,11 +16,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#15803d",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,9 +28,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased`} style={{ color: "#fff" }}>
+      <body className={`${inter.variable} font-sans bg-slate-950 text-slate-100 antialiased`}>
         {children}
       </body>
     </html>

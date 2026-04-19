@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseTeeTimeEmail } from "@/lib/email-parser";
 import { sendPush } from "@/lib/onesignal";
-import { pacificToUtcIso } from "@/lib/timezone";
 
 export async function POST(request: NextRequest) {
   let payload: Record<string, unknown>;
@@ -13,30 +12,37 @@ export async function POST(request: NextRequest) {
   }
 
   const toAddress: string = (payload.to as string) ?? "";
+  console.log("[webhook] to:", toAddress);
 
   const tokenMatch = toAddress.match(/tee-([a-f0-9]+)@/i);
   if (!tokenMatch) {
+    console.log("[webhook] no token match in:", toAddress);
     return NextResponse.json({ error: "No forwarder token in To address" }, { status: 400 });
   }
   const forwarderToken = tokenMatch[1];
+  console.log("[webhook] token:", forwarderToken);
 
   const svc = createServiceClient();
 
-  const { data: profile } = await svc
+  const { data: profile, error: profileError } = await svc
     .from("profiles")
     .select("id, display_name")
     .eq("forwarder_token", forwarderToken)
     .maybeSingle();
 
+  console.log("[webhook] profile:", profile?.id ?? null, "profileError:", profileError?.message ?? null);
+
   if (!profile) {
     return NextResponse.json({ error: "Unknown forwarder token", token: forwarderToken }, { status: 200 });
   }
 
-  const { data: membership } = await svc
+  const { data: membership, error: memberError } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", profile.id)
     .maybeSingle();
+
+  console.log("[webhook] membership:", membership?.group_id ?? null, "memberError:", memberError?.message ?? null);
 
   if (!membership) {
     return NextResponse.json({ error: "User has no group" }, { status: 200 });
@@ -47,20 +53,22 @@ export async function POST(request: NextRequest) {
   const emailBody = textBody || htmlBody;
   const isHtml = !textBody && !!htmlBody;
 
+  console.log("[webhook] emailBody length:", emailBody.length, "isHtml:", isHtml);
+
   const parsed = await parseTeeTimeEmail(emailBody, isHtml);
+  console.log("[webhook] parsed:", JSON.stringify(parsed));
 
   if (!parsed) {
+    console.log("[webhook] parse failed");
     const { data: userProfile } = await svc
       .from("profiles")
-      .select("push_subscription")
+      .select("onesignal_player_id")
       .eq("id", profile.id)
       .single();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((userProfile as any)?.push_subscription) {
+    if (userProfile?.onesignal_player_id) {
       await sendPush({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        subscriptions: [(userProfile as any).push_subscription],
+        playerIds: [userProfile.onesignal_player_id],
         title: "Couldn't read that email",
         body: "We couldn't parse your tee time confirmation. Please add it manually.",
       });
@@ -68,7 +76,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, parsed: false });
   }
 
-  const tee_datetime = pacificToUtcIso(parsed.tee_date, parsed.tee_time);
+  const tee_datetime = `${parsed.tee_date}T${parsed.tee_time}:00`;
+  console.log("[webhook] inserting tee time:", tee_datetime);
 
   const { data: teeTime, error: insertError } = await svc
     .from("tee_times")
@@ -86,6 +95,8 @@ export async function POST(request: NextRequest) {
     })
     .select()
     .single();
+
+  console.log("[webhook] insertError:", insertError?.message ?? null, "teeTimeId:", teeTime?.id ?? null);
 
   if (insertError) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
@@ -108,19 +119,20 @@ export async function POST(request: NextRequest) {
 
   const { data: profiles } = await svc
     .from("profiles")
-    .select("push_subscription")
+    .select("onesignal_player_id")
     .in("id", memberIds)
-    .not("push_subscription", "is", null);
+    .not("onesignal_player_id", "is", null);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subscriptions = (profiles ?? []).map((p: any) => p.push_subscription).filter(Boolean);
+  const playerIds = (profiles ?? [])
+    .map((p: { onesignal_player_id: string }) => p.onesignal_player_id)
+    .filter(Boolean);
 
-  if (subscriptions.length > 0) {
+  if (playerIds.length > 0) {
     const teeDate = new Date(tee_datetime);
-    const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric" });
-    const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true });
+    const dateStr = teeDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const timeStr = teeDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
     await sendPush({
-      subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
+      playerIds,
       title: "New tee time added! ⛳",
       body: `${parsed.course_name} · ${dateStr} at ${timeStr}`,
       data: { teeTimeId: teeTime.id },

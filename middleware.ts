@@ -50,7 +50,6 @@ export async function middleware(request: NextRequest) {
     "/api/tee-times",             // uses Bearer token auth, not cookies
     "/api/rsvps",                 // uses Bearer token auth, not cookies
     "/api/push",                  // uses Bearer token auth, not cookies
-    "/api/guest-invites",         // uses Bearer token auth, not cookies
   ];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
@@ -77,6 +76,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icons|sw.js|OneSignalSDKWorker.js|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icons|sw.js|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

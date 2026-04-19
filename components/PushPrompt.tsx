@@ -2,67 +2,91 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
-import { registerPush } from "@/lib/onesignal-client";
+import { createClient } from "@/lib/supabase/browser";
+
+declare global {
+  interface Window {
+    OneSignal?: {
+      init: (config: { appId: string; allowLocalhostAsSecureOrigin?: boolean }) => Promise<void>;
+      User: {
+        pushSubscription: {
+          optIn: () => Promise<void>;
+          id: string | null | undefined;
+        };
+      };
+    };
+  }
+}
+
+const ONESIGNAL_APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID ?? "";
 
 export function PushPrompt() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
+    const registered = localStorage.getItem("push_registered");
+    if (registered || !ONESIGNAL_APP_ID) return;
 
+    // Only show if in standalone mode (required for iOS push)
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
     const isAndroid = /Android/.test(navigator.userAgent);
     if (!isStandalone && !isAndroid) return;
 
-    (async () => {
-      if (Notification.permission === "granted") {
-        // Always silently re-register on launch — ensures subscription is saved even if a
-        // previous registration attempt failed (e.g. after the OneSignal→native migration).
-        // registerPush() reuses the existing pushManager subscription so this is cheap.
-        await registerPush().catch(() => {});
-      } else if (Notification.permission === "default" && !localStorage.getItem("push_dismissed")) {
-        if (!localStorage.getItem("push_init_done")) {
-          localStorage.setItem("push_init_done", "1");
-          setShow(true);
-        }
-      }
-    })();
+    // Check if push is supported
+    if (!("Notification" in window)) return;
+
+    setShow(true);
   }, []);
 
   async function enable() {
     setShow(false);
-    // Permission must be requested directly from a user gesture (iOS requirement).
-    if (Notification.permission !== "granted") {
-      const perm = await Notification.requestPermission();
-      if (perm !== "granted") return;
+    try {
+      if (!window.OneSignal) return;
+      await window.OneSignal.User.pushSubscription.optIn();
+      const playerId = window.OneSignal.User.pushSubscription.id;
+      if (playerId) {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch("/api/push/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token ?? ""}`,
+          },
+          body: JSON.stringify({ playerId }),
+        });
+        localStorage.setItem("push_registered", "1");
+      }
+    } catch {
+      // Silently fail — push is optional
     }
-    await registerPush().catch(() => {});
-  }
-
-  function dismiss() {
-    localStorage.setItem("push_dismissed", "1");
-    setShow(false);
   }
 
   if (!show) return null;
 
   return (
-    <div
-      className="fixed bottom-20 left-4 right-4 z-50 rounded-2xl p-4 shadow-2xl"
-      style={{ background: "rgba(7,30,18,0.97)", border: "0.5px solid rgba(80,200,110,0.35)" }}
-    >
+    <div className="fixed bottom-20 left-4 right-4 z-50 bg-green-950 border border-green-800 rounded-2xl p-4 shadow-2xl">
       <div className="flex items-start gap-3">
-        <Bell size={20} style={{ color: "#30D158", flexShrink: 0, marginTop: 2 }} />
+        <Bell className="text-green-400 shrink-0 mt-0.5" size={20} />
         <div className="flex-1">
           <p className="text-white font-semibold text-sm">Enable notifications</p>
-          <p className="text-xs mt-1 leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>
-            Get alerted when tee times are added and before you tee off.
+          <p className="text-green-300/70 text-xs mt-1 leading-relaxed">
+            Get alerts when new tee times are added and reminders before you tee off.
           </p>
           <div className="flex gap-2 mt-3">
-            <button onClick={enable} className="text-black text-xs font-semibold px-4 py-2 rounded-xl" style={{ background: "#30D158" }}>
-              Enable
+            <button
+              onClick={enable}
+              className="bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+            >
+              Enable notifications
             </button>
-            <button onClick={dismiss} className="text-xs px-3 py-2" style={{ color: "rgba(255,255,255,0.35)" }}>
+            <button
+              onClick={() => {
+                localStorage.setItem("push_registered", "dismissed");
+                setShow(false);
+              }}
+              className="text-slate-400 text-xs px-3"
+            >
               Not now
             </button>
           </div>

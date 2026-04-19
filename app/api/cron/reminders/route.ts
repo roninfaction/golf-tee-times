@@ -46,21 +46,20 @@ export async function POST(request: NextRequest) {
 
       const { data: profiles } = await svc
         .from("profiles")
-        .select("push_subscription")
+        .select("onesignal_player_id")
         .in("id", userIds)
-        .not("push_subscription", "is", null);
+        .not("onesignal_player_id", "is", null);
 
-      const subscriptions = (profiles ?? [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((p: any) => p.push_subscription)
+      const playerIds = (profiles ?? [])
+        .map((p: { onesignal_player_id: string }) => p.onesignal_player_id)
         .filter(Boolean);
 
-      if (subscriptions.length > 0) {
+      if (playerIds.length > 0) {
         const teeDate = new Date(tt.tee_datetime);
-        const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true });
+        const timeStr = teeDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
         await sendPush({
-          subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
+          playerIds,
           title: `Tee time ${label}! ⛳`,
           body: `${tt.course_name} · ${timeStr}`,
           data: { teeTimeId: tt.id },

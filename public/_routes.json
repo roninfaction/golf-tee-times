@@ -7,7 +7,6 @@
     "/icons/*",
     "/manifest.json",
     "/sw.js",
-    "/OneSignalSDKWorker.js",
     "/*.svg",
     "/*.png",
     "/*.jpg",

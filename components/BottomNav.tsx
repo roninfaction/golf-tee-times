@@ -2,65 +2,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Calendar, Plus, Users, User } from "lucide-react";
+import { Calendar, Plus, User, Users } from "lucide-react";
+import { clsx } from "clsx";
 
 const navItems = [
-  { href: "/upcoming", label: "Schedule", icon: Calendar },
-  { href: "/tee-times/new", label: "Add", icon: Plus, accent: true },
+  { href: "/upcoming", label: "Upcoming", icon: Calendar },
+  { href: "/tee-times/new", label: "Add", icon: Plus, primary: true },
   { href: "/group", label: "Group", icon: Users },
   { href: "/profile", label: "Profile", icon: User },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
-
-  // Clear pending indicator once navigation completes
-  useEffect(() => {
-    setPendingHref(null);
-  }, [pathname]);
-
-  function isActive(href: string): boolean {
-    // Show as active immediately on tap, before server responds
-    if (pendingHref) return pendingHref === href;
-    return pathname === href || (href !== "/tee-times/new" && pathname.startsWith(href));
-  }
 
   return (
-    <nav
-      className="fixed bottom-0 left-0 right-0 z-50"
-      style={{
-        background: "rgba(7,21,16,0.94)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        borderTop: "0.5px solid rgba(80,200,110,0.22)",
-        paddingBottom: "calc(env(safe-area-inset-bottom, 34px) + 30px)",
-      }}
-    >
-      <div className="flex items-center justify-around h-[58px]">
-        {navItems.map(({ href, label, icon: Icon, accent }) => {
-          const active = isActive(href);
-          const color = active ? "#30D158" : "rgba(255,255,255,0.42)";
+    <nav className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 pb-safe z-50">
+      <div className="flex items-center justify-around h-16">
+        {navItems.map(({ href, label, icon: Icon, primary }) => {
+          const active = pathname === href || (href !== "/tee-times/new" && pathname.startsWith(href));
           return (
             <Link
               key={href}
               href={href}
-              onClick={() => setPendingHref(href)}
-              className="flex flex-col items-center justify-center gap-[3px] flex-1 h-full active:opacity-50 transition-opacity duration-75"
+              className={clsx(
+                "flex flex-col items-center gap-0.5 min-w-[60px] py-2 rounded-xl transition-colors",
+                primary
+                  ? "bg-green-600 text-white px-4 rounded-xl -mt-5 shadow-lg shadow-green-900/50 border-2 border-slate-900"
+                  : active
+                  ? "text-green-400"
+                  : "text-slate-500"
+              )}
             >
-              {accent ? (
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ background: "#30D158" }}
-                >
-                  <Icon size={20} strokeWidth={2.5} className="text-black" />
-                </div>
-              ) : (
-                <>
-                  <Icon size={23} strokeWidth={active ? 2 : 1.5} style={{ color }} />
-                  <span className="text-[10px] font-medium" style={{ color }}>{label}</span>
-                </>
+              <Icon size={primary ? 22 : 20} strokeWidth={primary ? 2.5 : 2} />
+              {!primary && (
+                <span className="text-[10px] font-medium">{label}</span>
               )}
             </Link>
           );

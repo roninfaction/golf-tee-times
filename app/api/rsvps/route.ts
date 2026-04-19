@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   if (teeTime && teeTime.created_by && teeTime.created_by !== user.id) {
     const { data: creator } = await svc
       .from("profiles")
-      .select("push_subscription")
+      .select("onesignal_player_id")
       .eq("id", teeTime.created_by)
       .single();
 
@@ -45,10 +45,10 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (creator?.push_subscription) {
+    if (creator?.onesignal_player_id) {
       const statusLabel = status === "accepted" ? "is going ✅" : status === "declined" ? "can't make it ❌" : "is maybe going 🤔";
       await sendPush({
-        subscriptions: [creator.push_subscription as import("@/lib/web-push-server").PushSubscription],
+        playerIds: [creator.onesignal_player_id],
         title: `${teeTime.course_name}`,
         body: `${responder?.display_name ?? "Someone"} ${statusLabel}`,
         data: { teeTimeId },

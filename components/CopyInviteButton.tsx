@@ -15,8 +15,7 @@ export function CopyInviteButton({ url }: { url: string }) {
   return (
     <button
       onClick={copy}
-      className="flex items-center gap-2 text-sm font-semibold"
-      style={{ color: copied ? "#30D158" : "rgba(255,255,255,0.7)" }}
+      className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
     >
       {copied ? <Check size={15} /> : <Copy size={15} />}
       {copied ? "Link copied!" : "Copy invite link"}

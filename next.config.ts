@@ -14,7 +14,6 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_URL: "https://golfpack.app",
     NEXT_PUBLIC_ONESIGNAL_APP_ID: "f59a48aa-0ce4-4992-a7b8-55a612c6a7d6",
     NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN: "golfpack.app",
-    NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BPQO5XOm1mAH6bv9IBuxenGwzD-VGrEYmFkJ7rVmC09HVMfDYoLfTtk8mxbZI5fWYnAefa4PLkx2awkaIDb1Jnk",
   },
 };
 

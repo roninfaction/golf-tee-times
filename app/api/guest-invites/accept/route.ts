@@ -45,27 +45,26 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (teeTime) {
-      // Only notify members who are actually going to this tee time
-      const { data: acceptedRsvps } = await svc
-        .from("rsvps")
+      const { data: members } = await svc
+        .from("group_members")
         .select("user_id")
-        .eq("tee_time_id", teeTimeId)
-        .eq("status", "accepted");
+        .eq("group_id", (teeTime as { group_id: string }).group_id);
 
-      const memberIds = (acceptedRsvps ?? []).map((r: { user_id: string }) => r.user_id);
+      const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id);
 
       const { data: profiles } = await svc
         .from("profiles")
-        .select("push_subscription")
+        .select("onesignal_player_id")
         .in("id", memberIds)
-        .not("push_subscription", "is", null);
+        .not("onesignal_player_id", "is", null);
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const subscriptions = (profiles ?? []).map((p: any) => p.push_subscription).filter(Boolean);
+      const playerIds = (profiles ?? [])
+        .map((p: { onesignal_player_id: string }) => p.onesignal_player_id)
+        .filter(Boolean);
 
-      if (subscriptions.length > 0) {
+      if (playerIds.length > 0) {
         await sendPush({
-          subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
+          playerIds,
           title: `${(teeTime as { course_name: string }).course_name}`,
           body: `${name.trim()} filled the open spot! 🏌️`,
           data: { teeTimeId },

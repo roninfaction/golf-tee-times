@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
-import { getUserFromBearer } from "@/lib/auth-bearer";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golf-tee-times.pages.dev";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
@@ -58,7 +57,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getUserFromBearer(request.headers.get("Authorization"));
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { teeTimeId, inviteeName } = await request.json();

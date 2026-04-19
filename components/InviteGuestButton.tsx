@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 import { UserPlus, Copy, Check } from "lucide-react";
-import { createClient } from "@/lib/supabase/browser";
 
-export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string; openSpots: number }) {
+export function InviteGuestButton({
+  teeTimeId,
+  openSpots,
+}: {
+  teeTimeId: string;
+  openSpots: number;
+}) {
   const [loading, setLoading] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -13,13 +18,13 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
   async function generateLink() {
     setLoading(true);
     setError("");
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
+
     const res = await fetch("/api/guest-invites", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ teeTimeId }),
     });
+
     setLoading(false);
     if (res.ok) {
       const data = await res.json();
@@ -38,9 +43,10 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
   }
 
   return (
-    <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.08)" }}>
-      <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.35)" }}>
-        Invite a guest · {openSpots} spot{openSpots !== 1 ? "s" : ""} open
+    <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4">
+      <p className="text-sm font-semibold text-slate-400 mb-3">
+        Invite someone to fill a spot
+        <span className="text-slate-600 font-normal ml-1">({openSpots} open)</span>
       </p>
 
       {!link ? (
@@ -48,40 +54,41 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
           <button
             onClick={generateLink}
             disabled={loading}
-            className="flex items-center gap-2 w-full rounded-xl py-3 text-sm font-semibold justify-center transition-opacity"
-            style={{ background: "rgba(48,209,88,0.12)", color: "#30D158", opacity: loading ? 0.6 : 1 }}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors w-full justify-center"
           >
-            <UserPlus size={15} />
-            {loading ? "Generating…" : "Create invite link"}
+            <UserPlus size={16} />
+            {loading ? "Generating link…" : "Generate invite link"}
           </button>
-          <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
-            No account needed — they just click and accept
+          <p className="text-slate-600 text-xs mt-2 text-center">
+            They don&apos;t need an account — just click and accept.
           </p>
         </>
       ) : (
         <>
-          <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,0.06)" }}>
-            <p className="font-mono text-xs break-all" style={{ color: "#30D158" }}>{link}</p>
+          <div className="bg-slate-800 rounded-xl p-3 mb-3">
+            <p className="text-green-400 text-xs font-mono break-all">{link}</p>
           </div>
           <button
             onClick={copyLink}
-            className="flex items-center gap-2 w-full rounded-xl py-3 text-sm font-semibold justify-center transition-opacity"
-            style={{ background: "#30D158", color: "#000" }}
+            className="flex items-center gap-2 w-full bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors justify-center"
           >
-            {copied ? <Check size={15} /> : <Copy size={15} />}
+            {copied ? <Check size={16} /> : <Copy size={16} />}
             {copied ? "Copied!" : "Copy link"}
           </button>
+          <p className="text-slate-600 text-xs mt-2 text-center">
+            Send via iMessage, WhatsApp, email — your choice.
+            First to accept gets the spot.
+          </p>
           <button
             onClick={generateLink}
-            className="text-xs w-full text-center"
-            style={{ color: "rgba(255,255,255,0.3)" }}
+            className="text-slate-500 text-xs mt-2 w-full text-center underline"
           >
             Generate another link
           </button>
         </>
       )}
 
-      {error && <p className="text-xs" style={{ color: "#FF453A" }}>{error}</p>}
+      {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
     </div>
   );
 }

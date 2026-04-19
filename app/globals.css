@@ -3,34 +3,13 @@
 @layer base {
   * {
     box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  html {
-    background: #071510;
-  }
-
-  body {
-    background: linear-gradient(160deg, #0B1E14 0%, #061009 60%, #071510 100%);
-    background-attachment: fixed;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
 
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* Hide date/time input native chrome on dark backgrounds */
-  input[type="date"]::-webkit-calendar-picker-indicator,
-  input[type="time"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.4);
-    cursor: pointer;
-  }
-
-  ::-webkit-scrollbar { width: 0; }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
 }

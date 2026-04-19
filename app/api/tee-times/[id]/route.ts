@@ -26,6 +26,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const svc = createServiceClient();
+
+  // Only the creator can edit
+  const { data: existing } = await svc.from("tee_times").select("created_by").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const body = await request.json();
   const { data, error } = await svc
     .from("tee_times")
@@ -44,6 +50,12 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const svc = createServiceClient();
+
+  // Only the creator can delete
+  const { data: existing } = await svc.from("tee_times").select("created_by").eq("id", id).single();
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const { error } = await svc.from("tee_times").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

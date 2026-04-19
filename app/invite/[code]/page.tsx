@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { JoinGroupButton } from "@/components/JoinGroupButton";
 
@@ -14,8 +14,9 @@ export default async function InvitePage({ params }: PageProps) {
     redirect(`/login?next=/invite/${code}`);
   }
 
-  // Look up the group by invite code
-  const { data: group } = await supabase
+  // Use service client so non-members can look up the group by invite code
+  const svc = createServiceClient();
+  const { data: group } = await svc
     .from("groups")
     .select("id, name")
     .eq("invite_code", code)
@@ -32,7 +33,7 @@ export default async function InvitePage({ params }: PageProps) {
   }
 
   // Check if already a member
-  const { data: existing } = await supabase
+  const { data: existing } = await svc
     .from("group_members")
     .select("id")
     .eq("group_id", group.id)

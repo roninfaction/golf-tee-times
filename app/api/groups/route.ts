@@ -59,3 +59,32 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ step: "done", ...group }, { status: 201 });
 }
+
+export async function PATCH(request: NextRequest) {
+  const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+  if (!token) return NextResponse.json({ error: "No token" }, { status: 401 });
+
+  const svc = createServiceClient();
+  const { data: { user }, error: authError } = await svc.auth.getUser(token);
+  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { photo_url } = await request.json();
+  if (!photo_url) return NextResponse.json({ error: "photo_url required" }, { status: 400 });
+
+  const { data: membership } = await svc
+    .from("group_members")
+    .select("group_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership) return NextResponse.json({ error: "Not in a group" }, { status: 403 });
+
+  const { error } = await svc
+    .from("groups")
+    .update({ photo_url })
+    .eq("id", membership.group_id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

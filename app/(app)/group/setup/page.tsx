@@ -14,76 +14,68 @@ export default function GroupSetupPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        setError("Session expired — please sign out and sign in again.");
-        setLoading(false);
-        return;
-      }
-
+      if (!session) { setError("Session expired — please sign in again."); setLoading(false); return; }
       const res = await fetch("/api/groups", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ name: groupName }),
       });
-
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         window.location.href = "/upcoming";
       } else {
-        setError(`[${body.step ?? "?"}] ${body.error ?? `HTTP ${res.status}`}`);
+        setError(body.error ?? `Error ${res.status}`);
       }
     } catch (err) {
-      setError(`Failed: ${err instanceof Error ? err.message : String(err)}`);
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="px-4 pt-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/upcoming" className="text-slate-400 hover:text-white p-1 -ml-1">
-          <ChevronLeft size={24} />
+    <div className="min-h-screen pb-52">
+      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
+        <Link href="/upcoming" className="flex items-center gap-0.5 text-sm font-medium" style={{ color: "#30D158" }}>
+          <ChevronLeft size={18} strokeWidth={2} />
+          Cancel
         </Link>
-        <h1 className="text-xl font-bold text-white">Create your group</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Group</h1>
       </div>
 
-      <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-        Give your golf crew a name. You&apos;ll be the admin and can invite others with a shareable link.
-      </p>
+      <div className="px-4 pt-8">
+        <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.45)" }}>
+          Give your golf crew a name. You'll be the admin and can invite others with a shareable link.
+        </p>
 
-      <form onSubmit={createGroup} className="space-y-4">
-        <div>
-          <label className="block text-sm text-slate-400 mb-1.5">Group name</label>
-          <input
-            type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            placeholder="The Weekend Hackers"
-            required
-            autoFocus
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-green-600 focus:ring-1 focus:ring-green-600"
-          />
-        </div>
+        <form onSubmit={createGroup} className="space-y-4">
+          <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(255,255,255,0.055)", border: "0.5px solid rgba(80,200,110,0.16)" }}>
+            <input
+              type="text"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="The Weekend Hackers"
+              required
+              autoFocus
+              className="w-full px-4 py-3.5 text-white text-[15px] bg-transparent outline-none placeholder:text-white/20"
+            />
+          </div>
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors"
-        >
-          {loading ? "Creating…" : "Create group"}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 rounded-2xl text-base font-semibold text-black transition-opacity"
+            style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}
+          >
+            {loading ? "Creating…" : "Create Group"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

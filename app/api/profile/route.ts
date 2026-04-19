@@ -22,21 +22,33 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: `auth_failed:${userError?.message}` }, { status: 401 });
     }
 
-    const { data, error } = await service
+    let { data, error } = await service
       .from("profiles")
       .select("display_name, forwarder_token, email, push_subscription")
       .eq("id", user.id)
       .single();
 
+    // If push_subscription column doesn't exist yet (migration not applied), fall back gracefully
+    if (error && error.message?.includes("push_subscription")) {
+      const fallback = await service
+        .from("profiles")
+        .select("display_name, forwarder_token, email")
+        .eq("id", user.id)
+        .single();
+      data = fallback.data as typeof data;
+      error = fallback.error;
+    }
+
     if (error || !data) {
-      await service.from("profiles").insert({
+      // Profile row missing — create it
+      await service.from("profiles").upsert({
         id: user.id,
         email: user.email ?? "",
         display_name: (user.email ?? "").split("@")[0],
       });
       const { data: newData } = await service
         .from("profiles")
-        .select("display_name, forwarder_token, email, push_subscription")
+        .select("display_name, forwarder_token, email")
         .eq("id", user.id)
         .single();
       return NextResponse.json(newData ?? {});

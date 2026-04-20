@@ -25,19 +25,7 @@ self.addEventListener("push", (event) => {
     }
   }
 
-  event.waitUntil(
-    fetch("/api/push/log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ received: true, title, ts: Date.now() }),
-    }).catch(() => {})
-      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
-      .then((clients) => {
-        clients.forEach((c) => c.postMessage({ type: "PUSH_RECEIVED", title, body }));
-      })
-      .catch(() => {})
-      .then(() => self.registration.showNotification(title, { body, data }))
-  );
+  event.waitUntil(self.registration.showNotification(title, { body, data }));
 });
 
 self.addEventListener("notificationclick", (event) => {

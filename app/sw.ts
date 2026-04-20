@@ -10,7 +10,10 @@ declare global {
 
 declare const self: WorkerGlobalScope & typeof globalThis & {
   registration: { showNotification(title: string, options?: object): Promise<void> };
-  clients: { matchAll(opts?: object): Promise<{ url: string; focus(): void; navigate(url: string): void }[]>; openWindow(url: string): void };
+  clients: {
+    matchAll(opts?: object): Promise<{ url: string; focus(): void; navigate(url: string): void; postMessage(msg: unknown): void }[]>;
+    openWindow(url: string): void;
+  };
   location: { origin: string };
   addEventListener(type: string, handler: (event: unknown) => void): void;
 };
@@ -30,22 +33,31 @@ self.addEventListener("push", (evt) => {
       if (parsed.body) body = parsed.body;
       if (parsed.data) notifData = parsed.data;
     } catch {
-      // If JSON parse fails, try raw text as body
       try { body = event.data.text(); } catch { /* ignore */ }
     }
   }
 
-  const showPromise = self.registration.showNotification(title, {
-    body,
-    icon: "/icons/icon-192.png",
-    data: notifData,
-  }).catch((err: unknown) => {
-    // If first attempt fails, retry with minimal options (iOS compatibility)
-    console.error("[sw] showNotification failed, retrying minimal:", err);
-    return self.registration.showNotification("GolfPack", { body });
-  });
+  const work = (async () => {
+    // Broadcast to any open app windows — this lets us confirm the SW received the push
+    // even if showNotification is being blocked by iOS
+    try {
+      const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of allClients) {
+        client.postMessage({ type: "PUSH_RECEIVED", title, body });
+      }
+    } catch { /* ignore */ }
 
-  event.waitUntil(showPromise);
+    // Try showing the notification — stripped to bare minimum for iOS compatibility
+    try {
+      await self.registration.showNotification(title, { body, data: notifData });
+    } catch (err) {
+      // Last resort: plain title+body only
+      try { await self.registration.showNotification("GolfPack", { body }); } catch { /* ignore */ }
+      void err;
+    }
+  })();
+
+  event.waitUntil(work);
 });
 
 // Open the relevant page when a notification is tapped

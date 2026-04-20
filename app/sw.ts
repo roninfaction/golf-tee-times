@@ -3,7 +3,7 @@ import { Serwist } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
-    __SW_MANIFEST: never;
+    __SW_MANIFEST: (import("serwist").PrecacheEntry | string)[] | undefined;
   }
 }
 
@@ -80,8 +80,11 @@ self.addEventListener("notificationclick", (evt) => {
   );
 });
 
-// No precaching — install completes instantly so the SW activates immediately.
-// Runtime caching still works for offline-ish performance.
+// Reference __SW_MANIFEST to satisfy @serwist/next webpack plugin,
+// but pass empty array so install completes instantly (no asset fetching).
+// The stuck-in-installing bug was caused by 50+ precache fetches timing out on iOS.
+void self.__SW_MANIFEST;
+
 const serwist = new Serwist({
   precacheEntries: [],
   skipWaiting: true,

@@ -1,10 +1,9 @@
-import { defaultCache } from "@serwist/next/worker";
-import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
+import type { SerwistGlobalConfig } from "serwist";
 import { Serwist } from "serwist";
 
 declare global {
   interface WorkerGlobalScope extends SerwistGlobalConfig {
-    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
+    __SW_MANIFEST: never;
   }
 }
 
@@ -38,16 +37,16 @@ self.addEventListener("push", (evt) => {
   }
 
   const work = (async () => {
-    // Ping server — confirms SW received the push (visible in Cloudflare logs)
+    // Ping server so we can confirm in Cloudflare logs that the SW received the push
     try {
       await fetch("/api/push/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ received: true, title, ts: Date.now() }),
       });
-    } catch { /* ignore — don't let logging block notification */ }
+    } catch { /* ignore */ }
 
-    // Broadcast to any open app windows for in-app banner
+    // Broadcast to open app windows (shows in-app debug banner)
     try {
       const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of allClients) {
@@ -55,7 +54,7 @@ self.addEventListener("push", (evt) => {
       }
     } catch { /* ignore */ }
 
-    // Show the notification — bare minimum options for iOS compatibility
+    // Show notification — bare minimum options for iOS
     try {
       await self.registration.showNotification(title, { body, data: notifData });
     } catch {
@@ -66,7 +65,7 @@ self.addEventListener("push", (evt) => {
   event.waitUntil(work);
 });
 
-// Open the relevant page when a notification is tapped
+// Handle notification tap
 self.addEventListener("notificationclick", (evt) => {
   const event = evt as unknown as { notification: { close(): void; data: { teeTimeId?: string } }; waitUntil(p: Promise<unknown>): void };
   event.notification.close();
@@ -81,12 +80,13 @@ self.addEventListener("notificationclick", (evt) => {
   );
 });
 
+// No precaching — install completes instantly so the SW activates immediately.
+// Runtime caching still works for offline-ish performance.
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
+  precacheEntries: [],
   skipWaiting: true,
   clientsClaim: true,
-  navigationPreload: true,
-  runtimeCaching: defaultCache,
+  navigationPreload: false,
 });
 
 serwist.addEventListeners();

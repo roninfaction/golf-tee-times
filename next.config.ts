@@ -1,10 +1,12 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
 
+// Serwist disabled — we use a hand-written public/sw.js instead.
+// The Serwist runtime was causing the SW to hang in "installing" on iOS.
 const withSerwist = withSerwistInit({
   swSrc: "app/sw.ts",
   swDest: "public/sw.js",
-  disable: process.env.NODE_ENV === "development",
+  disable: true,
 });
 
 const nextConfig: NextConfig = {

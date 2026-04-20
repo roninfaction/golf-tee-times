@@ -33,16 +33,49 @@ export default function ProfilePage() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState("");
   const [isStandalone, setIsStandalone] = useState(true);
+  const [swDiag, setSwDiag] = useState<string[]>([]);
 
   const forwardingEmail = forwarderToken ? `tee-${forwarderToken}@${EMAIL_FORWARD_DOMAIN}` : "";
 
   useEffect(() => {
-    // On iOS, push subscriptions only work when the app is running as a home-screen PWA
-    // (standalone mode). Detect this so we can warn the user if they're in Safari browser.
     setIsStandalone(
       window.matchMedia("(display-mode: standalone)").matches ||
       (navigator as unknown as { standalone?: boolean }).standalone === true
     );
+
+    // Collect SW + push diagnostics
+    (async () => {
+      const lines: string[] = [];
+      lines.push(`standalone: ${window.matchMedia("(display-mode: standalone)").matches}`);
+      lines.push(`notification_api: ${"Notification" in window}`);
+      lines.push(`permission: ${("Notification" in window) ? Notification.permission : "n/a"}`);
+      lines.push(`sw_api: ${"serviceWorker" in navigator}`);
+      lines.push(`push_api: ${"PushManager" in window}`);
+
+      if ("serviceWorker" in navigator) {
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          lines.push(`sw_registrations: ${regs.length}`);
+          for (const reg of regs) {
+            const state = reg.active?.state ?? reg.installing?.state ?? reg.waiting?.state ?? "none";
+            lines.push(`sw: ${reg.scope} [${state}] ${reg.active?.scriptURL ?? "no-active"}`);
+          }
+          const ready = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise<null>((r) => setTimeout(() => r(null), 3000)),
+          ]);
+          if (ready) {
+            const sub = await (ready as ServiceWorkerRegistration).pushManager.getSubscription();
+            lines.push(`local_sub: ${sub ? sub.endpoint.slice(0, 50) + "…" : "NONE"}`);
+          } else {
+            lines.push("sw_ready: TIMEOUT");
+          }
+        } catch (e) {
+          lines.push(`sw_error: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      setSwDiag(lines);
+    })();
 
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -57,18 +90,6 @@ export default function ProfilePage() {
 
           if (data.push_subscription) {
             setNotifState("registered");
-            // Verify the browser actually has an active subscription matching the DB record.
-            // If not, the stored subscription is stale (e.g. from a different context) and
-            // needs to be refreshed before pushes will arrive on this device.
-            if ("serviceWorker" in navigator && "PushManager" in window) {
-              navigator.serviceWorker.ready.then((reg) =>
-                reg.pushManager.getSubscription().then((existing) => {
-                  if (!existing) {
-                    setNotifDiag("Subscription mismatch — tap Re-enable on this device");
-                  }
-                })
-              ).catch(() => {});
-            }
           } else if (!("Notification" in window)) {
             setNotifState("needs_enable");
           } else if (Notification.permission === "denied") {
@@ -390,6 +411,18 @@ export default function ProfilePage() {
               {notifError && (
                 <p className="text-xs leading-relaxed" style={{ color: "#FF453A" }}>{notifError}</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* SW Diagnostics */}
+        {swDiag.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: "rgba(255,255,255,0.3)" }}>Push diagnostics</p>
+            <div className="rounded-2xl px-4 py-3 space-y-1" style={{ background: "rgba(0,0,0,0.3)", border: "0.5px solid rgba(255,255,255,0.08)" }}>
+              {swDiag.map((line, i) => (
+                <p key={i} className="text-xs font-mono break-all" style={{ color: "rgba(255,255,255,0.4)" }}>{line}</p>
+              ))}
             </div>
           </div>
         )}

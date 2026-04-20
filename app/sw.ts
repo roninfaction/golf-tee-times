@@ -38,8 +38,16 @@ self.addEventListener("push", (evt) => {
   }
 
   const work = (async () => {
-    // Broadcast to any open app windows — this lets us confirm the SW received the push
-    // even if showNotification is being blocked by iOS
+    // Ping server — confirms SW received the push (visible in Cloudflare logs)
+    try {
+      await fetch("/api/push/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ received: true, title, ts: Date.now() }),
+      });
+    } catch { /* ignore — don't let logging block notification */ }
+
+    // Broadcast to any open app windows for in-app banner
     try {
       const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of allClients) {
@@ -47,13 +55,11 @@ self.addEventListener("push", (evt) => {
       }
     } catch { /* ignore */ }
 
-    // Try showing the notification — stripped to bare minimum for iOS compatibility
+    // Show the notification — bare minimum options for iOS compatibility
     try {
       await self.registration.showNotification(title, { body, data: notifData });
-    } catch (err) {
-      // Last resort: plain title+body only
+    } catch {
       try { await self.registration.showNotification("GolfPack", { body }); } catch { /* ignore */ }
-      void err;
     }
   })();
 

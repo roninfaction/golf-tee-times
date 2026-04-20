@@ -117,9 +117,12 @@ export async function sendWebPush(
   subscription: PushSubscription,
   notification: { title: string; body: string; data?: Record<string, string> }
 ): Promise<{ ok: boolean; status?: number; body?: string }> {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const publicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) return { ok: false };
+  if (!publicKey || !privateKey) {
+    console.error("[web-push] VAPID keys not configured. Set VAPID_PRIVATE_KEY in Cloudflare Pages environment variables.");
+    return { ok: false, body: "VAPID keys not configured" };
+  }
 
   const payload = JSON.stringify(notification);
   const encrypted = await encryptPayload(subscription.p256dh, subscription.auth, payload);
@@ -147,9 +150,12 @@ export async function sendWebPush(
 export async function sendEmptyPush(
   subscription: PushSubscription
 ): Promise<{ ok: boolean; status?: number; body?: string }> {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const publicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) return { ok: false };
+  if (!publicKey || !privateKey) {
+    console.error("[web-push] VAPID keys not configured. Set VAPID_PRIVATE_KEY in Cloudflare Pages environment variables.");
+    return { ok: false, body: "VAPID keys not configured" };
+  }
 
   const jwt = await createVapidJWT(subscription.endpoint, privateKey);
   const res = await fetch(subscription.endpoint, {
@@ -175,5 +181,12 @@ export async function sendPush({
   data?: Record<string, string>;
 }): Promise<void> {
   if (!subscriptions.length) return;
-  await Promise.allSettled(subscriptions.map((sub) => sendWebPush(sub, { title, body, data })));
+  const results = await Promise.allSettled(subscriptions.map((sub) => sendWebPush(sub, { title, body, data })));
+  for (const r of results) {
+    if (r.status === "fulfilled" && !r.value.ok) {
+      console.error(`[web-push] sendPush failed: status=${r.value.status} body=${r.value.body}`);
+    } else if (r.status === "rejected") {
+      console.error("[web-push] sendPush threw:", r.reason);
+    }
+  }
 }

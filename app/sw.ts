@@ -20,27 +20,32 @@ self.addEventListener("push", (evt) => {
   const event = evt as unknown as { data: { json(): unknown; text(): string } | null; waitUntil(p: Promise<unknown>): void };
 
   let title = "GolfPack";
-  let body = "";
+  let body = "You have a new update";
   let notifData: { teeTimeId?: string } = {};
 
-  if (!event.data) {
-    // Push arrived but payload could not be decrypted — show a generic nudge
-    // so the user knows the delivery chain is working even if encryption failed.
-    body = "Tap to open GolfPack";
-  } else {
-    let data: { title?: string; body?: string; data?: { teeTimeId?: string } } = {};
-    try { data = event.data.json() as typeof data; } catch { data = { title: "GolfPack", body: event.data.text() }; }
-    title = data.title ?? "GolfPack";
-    body = data.body ?? "";
-    notifData = data.data ?? {};
+  if (event.data) {
+    try {
+      const parsed = event.data.json() as { title?: string; body?: string; data?: { teeTimeId?: string } };
+      if (parsed.title) title = parsed.title;
+      if (parsed.body) body = parsed.body;
+      if (parsed.data) notifData = parsed.data;
+    } catch {
+      // If JSON parse fails, try raw text as body
+      try { body = event.data.text(); } catch { /* ignore */ }
+    }
   }
 
-  event.waitUntil(self.registration.showNotification(title, {
+  const showPromise = self.registration.showNotification(title, {
     body,
     icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
     data: notifData,
-  }));
+  }).catch((err: unknown) => {
+    // If first attempt fails, retry with minimal options (iOS compatibility)
+    console.error("[sw] showNotification failed, retrying minimal:", err);
+    return self.registration.showNotification("GolfPack", { body });
+  });
+
+  event.waitUntil(showPromise);
 });
 
 // Open the relevant page when a notification is tapped

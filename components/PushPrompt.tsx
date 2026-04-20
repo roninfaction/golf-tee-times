@@ -21,10 +21,8 @@ export function PushPrompt() {
         // registerPush() reuses the existing pushManager subscription so this is cheap.
         await registerPush().catch(() => {});
       } else if (Notification.permission === "default" && !localStorage.getItem("push_dismissed")) {
-        if (!localStorage.getItem("push_init_done")) {
-          localStorage.setItem("push_init_done", "1");
-          setShow(true);
-        }
+        // Show the banner regardless of push_init_done — it only suppresses after explicit dismiss
+        setShow(true);
       }
     })();
   }, []);

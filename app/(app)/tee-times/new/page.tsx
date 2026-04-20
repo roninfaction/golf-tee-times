@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
+import { pacificToUtcIso } from "@/lib/timezone";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -34,7 +35,7 @@ export default function NewTeeTimePage() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify({
         course_name: courseName,
-        tee_datetime: new Date(`${teeDate}T${teeTime}:00`).toISOString(),
+        tee_datetime: pacificToUtcIso(teeDate, teeTime),
         holes,
         max_players: maxPlayers,
         notes: notes || null,

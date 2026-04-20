@@ -12,35 +12,40 @@ const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 
-function getWeekDays(referenceDate: Date): Date[] {
-  const day = referenceDate.getDay();
-  const diff = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(referenceDate);
-  monday.setDate(referenceDate.getDate() + diff);
-  monday.setHours(0, 0, 0, 0);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+const TZ = "America/Los_Angeles";
+
+function getPacificDateStr(d: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-function isSameDay(a: Date, b: Date) {
-  return a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
+function getWeekDayStrs(referenceDate: Date): string[] {
+  const todayStr = getPacificDateStr(referenceDate);
+  const dayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" }).format(referenceDate);
+  const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayOfWeek);
+  const diff = dayIdx === 0 ? -6 : 1 - dayIdx;
+  return Array.from({ length: 7 }, (_, i) => {
+    const base = new Date(todayStr + "T12:00:00Z");
+    base.setUTCDate(base.getUTCDate() + diff + i);
+    return getPacificDateStr(base);
+  });
 }
 
 function daysUntil(isoString: string): string {
   const d = new Date(isoString);
   const now = new Date();
-  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const teeDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round((teeDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+  const todayStr = getPacificDateStr(now);
+  const teeStr = getPacificDateStr(d);
+  const diff = Math.round(
+    (new Date(teeStr).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24)
+  );
   if (diff === 0) return "Today";
   if (diff === 1) return "Tomorrow";
   if (diff < 7) return `In ${diff} days`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric" });
 }
 
 export default async function UpcomingPage() {
@@ -94,8 +99,11 @@ export default async function UpcomingPage() {
     return { ...tt, my_rsvp: myRsvp, accepted_count: acceptedCount + guestAcceptedCount };
   });
 
-  const weekDays = getWeekDays(today);
-  const monthLabel = weekDays[0].toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const weekDayStrs = getWeekDayStrs(today);
+  const todayPacificStr = getPacificDateStr(today);
+  const monthLabel = new Date(weekDayStrs[0] + "T12:00:00Z").toLocaleDateString("en-US", {
+    timeZone: TZ, month: "long", year: "numeric",
+  });
 
   return (
     <div className="px-4 pt-12 pb-52">
@@ -120,9 +128,10 @@ export default async function UpcomingPage() {
       <div className="rounded-2xl p-4 mb-6" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
         <p className="text-xs font-semibold mb-3 px-0.5 uppercase tracking-wide" style={{ color: GOLD }}>{monthLabel}</p>
         <div className="grid grid-cols-7 gap-1">
-          {weekDays.map((day, i) => {
-            const isToday = isSameDay(day, today);
-            const dayTimes = rows.filter(tt => isSameDay(new Date(tt.tee_datetime), day));
+          {weekDayStrs.map((dayStr, i) => {
+            const isToday = dayStr === todayPacificStr;
+            const dayNum = parseInt(dayStr.slice(8), 10);
+            const dayTimes = rows.filter(tt => getPacificDateStr(new Date(tt.tee_datetime)) === dayStr);
             return (
               <div key={i} className="flex flex-col items-center gap-1.5">
                 <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>{DAY_LABELS[i]}</span>
@@ -132,7 +141,7 @@ export default async function UpcomingPage() {
                   background: isToday ? "#30D158" : "transparent",
                   color: isToday ? "#000" : "rgba(255,255,255,0.8)",
                 }}>
-                  {day.getDate()}
+                  {dayNum}
                 </div>
                 <div className="flex gap-0.5 justify-center min-h-[5px]">
                   {dayTimes.map((tt) => {

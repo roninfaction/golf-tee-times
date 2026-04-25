@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseTeeTimeEmail } from "@/lib/email-parser";
+import { searchCourseByName } from "@/lib/google-places";
 import { sendPush } from "@/lib/onesignal";
 import { pacificToUtcIso } from "@/lib/timezone";
 
@@ -70,12 +71,31 @@ export async function POST(request: NextRequest) {
 
   const tee_datetime = pacificToUtcIso(parsed.tee_date, parsed.tee_time);
 
+  // Try to match course via Google Places (best-effort, non-blocking)
+  let coursePlaceId: string | null = null;
+  const courseMatch = await searchCourseByName(parsed.course_name);
+  if (courseMatch) {
+    await svc.from("courses").upsert({
+      place_id: courseMatch.place_id,
+      name: courseMatch.name,
+      address: courseMatch.address,
+      phone: courseMatch.phone,
+      website: courseMatch.website,
+      maps_url: courseMatch.maps_url,
+      lat: courseMatch.lat,
+      lng: courseMatch.lng,
+      photo_uri: courseMatch.photo_uri ?? null,
+    }, { onConflict: "place_id" });
+    coursePlaceId = courseMatch.place_id;
+  }
+
   const { data: teeTime, error: insertError } = await svc
     .from("tee_times")
     .insert({
       created_by: profile.id,
       group_id: membership.group_id,
       course_name: parsed.course_name,
+      course_place_id: coursePlaceId,
       tee_datetime,
       holes: parsed.holes,
       max_players: 4,
@@ -91,25 +111,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const { data: members } = await svc
-    .from("group_members")
-    .select("user_id")
-    .eq("group_id", membership.group_id);
+  // Only add the creator's RSVP. Group members are invited explicitly via
+  // the Invite Group button or individual guest invites.
+  await svc.from("rsvps").insert({
+    tee_time_id: teeTime.id,
+    user_id: profile.id,
+    status: "accepted",
+  });
 
-  const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id);
-
-  await svc.from("rsvps").insert(
-    memberIds.map((uid: string) => ({
-      tee_time_id: teeTime.id,
-      user_id: uid,
-      status: uid === profile.id ? "accepted" : "pending",
-    }))
-  );
-
+  // Notify only the creator that the tee time was parsed and added.
   const { data: profiles } = await svc
     .from("profiles")
     .select("push_subscription")
-    .in("id", memberIds)
+    .eq("id", profile.id)
     .not("push_subscription", "is", null);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

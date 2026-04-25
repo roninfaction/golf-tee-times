@@ -4,6 +4,7 @@ export type Profile = {
   email: string;
   forwarder_token: string;
   onesignal_player_id: string | null;
+  avatar_url: string | null;
 };
 
 export type Group = {
@@ -21,12 +22,25 @@ export type GroupMember = {
   profile?: Profile;
 };
 
+export type Course = {
+  place_id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  website: string | null;
+  maps_url: string | null;
+  lat: number | null;
+  lng: number | null;
+  photo_uri: string | null;
+};
+
 export type TeeTime = {
   id: string;
   created_at: string;
   created_by: string;
   group_id: string;
   course_name: string;
+  course_place_id: string | null;
   tee_datetime: string;
   holes: 9 | 18;
   max_players: number;

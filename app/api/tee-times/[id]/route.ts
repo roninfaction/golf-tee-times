@@ -33,9 +33,35 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
+  const { course_name, course_place_id, course_details, tee_datetime, holes, max_players, notes, confirmation_number } = body;
+
+  // Upsert course record if details provided
+  if (course_place_id && course_details) {
+    await svc.from("courses").upsert({
+      place_id: course_details.place_id,
+      name: course_details.name,
+      address: course_details.address,
+      phone: course_details.phone,
+      website: course_details.website,
+      maps_url: course_details.maps_url,
+      lat: course_details.lat,
+      lng: course_details.lng,
+      photo_uri: course_details.photo_uri ?? null,
+    }, { onConflict: "place_id" });
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (course_name !== undefined) updates.course_name = course_name;
+  if (course_place_id !== undefined) updates.course_place_id = course_place_id;
+  if (tee_datetime !== undefined) updates.tee_datetime = tee_datetime;
+  if (holes !== undefined) updates.holes = holes;
+  if (max_players !== undefined) updates.max_players = max_players;
+  if (notes !== undefined) updates.notes = notes;
+  if (confirmation_number !== undefined) updates.confirmation_number = confirmation_number;
+
   const { data, error } = await svc
     .from("tee_times")
-    .update(body)
+    .update(updates)
     .eq("id", id)
     .select()
     .single();

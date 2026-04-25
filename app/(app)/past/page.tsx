@@ -30,13 +30,27 @@ export default async function PastPage() {
     );
   }
 
-  const { data: teeTimes } = await svc
+  const { data: myRsvpRows } = await svc
+    .from("rsvps")
+    .select("tee_time_id")
+    .eq("user_id", user.id);
+
+  const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
+
+  let teeTimesQuery = svc
     .from("tee_times")
     .select("*, rsvps(user_id, status), guest_invites(status)")
-    .eq("group_id", membership.group_id)
     .lt("tee_datetime", new Date().toISOString())
     .order("tee_datetime", { ascending: false })
     .limit(30);
+
+  if (invitedIds.length > 0) {
+    teeTimesQuery = teeTimesQuery.or(`created_by.eq.${user.id},id.in.(${invitedIds.join(",")})`);
+  } else {
+    teeTimesQuery = teeTimesQuery.eq("created_by", user.id);
+  }
+
+  const { data: teeTimes } = await teeTimesQuery;
 
   return (
     <div className="min-h-screen pb-52">

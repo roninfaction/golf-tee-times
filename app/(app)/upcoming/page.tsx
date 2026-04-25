@@ -84,13 +84,28 @@ export default async function UpcomingPage() {
   const in60 = new Date(today);
   in60.setDate(today.getDate() + 60);
 
-  const { data: teeTimes } = await svc
+  // Fetch tee time IDs the user has been invited to (has an RSVP row).
+  const { data: myRsvpRows } = await svc
+    .from("rsvps")
+    .select("tee_time_id")
+    .eq("user_id", user.id);
+
+  const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
+
+  let teeTimesQuery = svc
     .from("tee_times")
-    .select("*, rsvps(user_id, status), guest_invites(status)")
-    .eq("group_id", groupId)
+    .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
     .gte("tee_datetime", today.toISOString())
     .lte("tee_datetime", in60.toISOString())
     .order("tee_datetime", { ascending: true });
+
+  if (invitedIds.length > 0) {
+    teeTimesQuery = teeTimesQuery.or(`created_by.eq.${user.id},id.in.(${invitedIds.join(",")})`);
+  } else {
+    teeTimesQuery = teeTimesQuery.eq("created_by", user.id);
+  }
+
+  const { data: teeTimes } = await teeTimesQuery;
 
   const rows = (teeTimes ?? []).map((tt: TeeTime & { rsvps: Rsvp[]; guest_invites: GuestInvite[] }) => {
     const myRsvp = tt.rsvps.find((r: Rsvp) => r.user_id === user.id) ?? null;
@@ -175,18 +190,32 @@ export default async function UpcomingPage() {
               ? { background: "rgba(255,69,58,0.12)", color: "#FF453A" }
               : { background: "rgba(201,168,76,0.15)", color: GOLD };
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const photoUri = (tt as any).course?.photo_uri as string | null | undefined;
+
             return (
               <Link
                 key={tt.id}
                 href={`/tee-times/${tt.id}`}
-                className="block rounded-2xl p-4 transition-opacity active:opacity-70"
+                className="block rounded-2xl overflow-hidden transition-opacity active:opacity-70"
                 style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: GOLD }}>
+                {photoUri && (
+                  <div className="relative h-28 w-full">
+                    <img src={photoUri} alt={tt.course_name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.65))" }} />
+                    <p className="absolute bottom-2.5 left-4 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.7)" }}>
                       {daysUntil(tt.tee_datetime)}
                     </p>
+                  </div>
+                )}
+                <div className="flex items-start justify-between gap-3 p-4">
+                  <div className="flex-1 min-w-0">
+                    {!photoUri && (
+                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: GOLD }}>
+                        {daysUntil(tt.tee_datetime)}
+                      </p>
+                    )}
                     <p className="font-semibold text-white text-[16px] truncate tracking-tight">{tt.course_name}</p>
                     <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>
                       {formatTeeTime(tt.tee_datetime)} &middot; {tt.holes}H &middot; {tt.accepted_count}/{tt.max_players} going

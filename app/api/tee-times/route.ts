@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
-import { sendPush } from "@/lib/onesignal";
 
 export async function GET(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { course_name, tee_datetime, holes, max_players, notes, confirmation_number, source } = body;
+  const { course_name, course_place_id, course_details, tee_datetime, holes, max_players, notes, confirmation_number, source } = body;
 
   if (!course_name || !tee_datetime) {
     return NextResponse.json({ error: "course_name and tee_datetime are required" }, { status: 400 });
@@ -50,12 +49,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "You are not in a group" }, { status: 400 });
   }
 
+  // Upsert course record if we have Place details
+  if (course_place_id && course_details) {
+    await svc.from("courses").upsert({
+      place_id: course_details.place_id,
+      name: course_details.name,
+      address: course_details.address,
+      phone: course_details.phone,
+      website: course_details.website,
+      maps_url: course_details.maps_url,
+      lat: course_details.lat,
+      lng: course_details.lng,
+      photo_uri: course_details.photo_uri ?? null,
+    }, { onConflict: "place_id" });
+  }
+
   const { data: teeTime, error } = await svc
     .from("tee_times")
     .insert({
       created_by: user.id,
       group_id: membership.group_id,
       course_name,
+      course_place_id: course_place_id ?? null,
       tee_datetime,
       holes: holes ?? 18,
       max_players: max_players ?? 4,
@@ -68,44 +83,13 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const { data: members } = await svc
-    .from("group_members")
-    .select("user_id")
-    .eq("group_id", membership.group_id);
-
-  const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id);
-
-  await svc.from("rsvps").insert(
-    memberIds.map((uid: string) => ({
-      tee_time_id: teeTime.id,
-      user_id: uid,
-      status: uid === user.id ? "accepted" : "pending",
-    }))
-  );
-
-  const otherMemberIds = memberIds.filter((id: string) => id !== user.id);
-  if (otherMemberIds.length > 0) {
-    const { data: profiles } = await svc
-      .from("profiles")
-      .select("push_subscription")
-      .in("id", otherMemberIds)
-      .not("push_subscription", "is", null);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const subscriptions = (profiles ?? []).map((p: any) => p.push_subscription).filter(Boolean);
-
-    if (subscriptions.length > 0) {
-      const teeDate = new Date(tee_datetime);
-      const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric" });
-      const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true });
-      await sendPush({
-        subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
-        title: "New tee time! ⛳",
-        body: `${course_name} · ${dateStr} at ${timeStr}`,
-        data: { teeTimeId: teeTime.id },
-      });
-    }
-  }
+  // Only create an RSVP for the creator. Group members are invited explicitly via
+  // POST /api/tee-times/[id]/invite-group, which makes the tee time visible to them.
+  await svc.from("rsvps").insert({
+    tee_time_id: teeTime.id,
+    user_id: user.id,
+    status: "accepted",
+  });
 
   return NextResponse.json(teeTime, { status: 201 });
 }

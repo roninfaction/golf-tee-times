@@ -1,22 +1,40 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
 import { pacificToUtcIso } from "@/lib/timezone";
 import { CourseAutocomplete } from "@/components/CourseAutocomplete";
 import type { CourseDetails } from "@/lib/google-places";
+import type { TeeTime } from "@/lib/types";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 const DIVIDER = "rgba(80,200,110,0.10)";
 
-export default function NewTeeTimePage() {
+function utcToLocalParts(isoStr: string): { date: string; time: string } {
+  const d = new Date(isoStr);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)!.value;
+  return {
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour") === "24" ? "00" : get("hour")}:${get("minute")}`,
+  };
+}
+
+export default function EditTeeTimePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const { id } = useParams<{ id: string }>();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
   const [coursePlaceId, setCoursePlaceId] = useState<string | null>(null);
@@ -28,14 +46,45 @@ export default function NewTeeTimePage() {
   const [notes, setNotes] = useState("");
   const [confirmationNumber, setConfirmationNumber] = useState("");
 
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+
+      const res = await fetch(`/api/tee-times/${id}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) { router.push(`/tee-times/${id}`); return; }
+
+      const tt = await res.json() as TeeTime;
+
+      // Guard: only creator should land here (API also enforces this on PATCH)
+      if (tt.created_by !== session.user.id) { router.push(`/tee-times/${id}`); return; }
+
+      const { date, time } = utcToLocalParts(tt.tee_datetime);
+      setCourseName(tt.course_name);
+      setCoursePlaceId(tt.course_place_id ?? null);
+      setTeeDate(date);
+      setTeeTime(time);
+      setHoles(tt.holes);
+      setMaxPlayers(tt.max_players);
+      setNotes(tt.notes ?? "");
+      setConfirmationNumber(tt.confirmation_number ?? "");
+      setLoading(false);
+    }
+    load();
+  }, [id, router]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError("");
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/tee-times", {
-      method: "POST",
+
+    const res = await fetch(`/api/tee-times/${id}`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify({
         course_name: courseName,
@@ -48,31 +97,33 @@ export default function NewTeeTimePage() {
         confirmation_number: confirmationNumber || null,
       }),
     });
-    setLoading(false);
+    setSaving(false);
     if (res.ok) {
-      const data = await res.json();
-      router.push(`/tee-times/${data.id}`);
+      router.push(`/tee-times/${id}`);
     } else {
       const err = await res.json();
       setError(err.error ?? "Something went wrong");
     }
   }
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split("T")[0];
-
   const fieldStyle = "w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-52">
-      {/* Header */}
       <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-        <Link href="/upcoming" style={{ color: "#30D158" }} className="flex items-center gap-0.5 text-sm font-medium">
+        <Link href={`/tee-times/${id}`} style={{ color: "#30D158" }} className="flex items-center gap-0.5 text-sm font-medium">
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel
         </Link>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Tee Time</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">Edit Tee Time</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 pt-6 space-y-6">
@@ -86,7 +137,6 @@ export default function NewTeeTimePage() {
               setCoursePlaceId(placeId);
               setCourseDetails(details);
             }}
-            autoFocus
           />
         </div>
 
@@ -98,7 +148,6 @@ export default function NewTeeTimePage() {
               type="date"
               value={teeDate}
               onChange={(e) => setTeeDate(e.target.value)}
-              min={minDate}
               required
               className={fieldStyle}
               style={{ borderBottom: `0.5px solid ${DIVIDER}`, colorScheme: "dark" }}
@@ -186,17 +235,12 @@ export default function NewTeeTimePage() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={saving}
           className="w-full py-4 rounded-2xl text-base font-semibold text-black transition-opacity"
-          style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}
+          style={{ background: "#30D158", opacity: saving ? 0.6 : 1 }}
         >
-          {loading ? "Adding…" : "Add Tee Time"}
+          {saving ? "Saving…" : "Save Changes"}
         </button>
-
-        <p className="text-xs text-center pb-2" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Got a confirmation email? Forward it to your GolfPack address in{" "}
-          <a href="/profile" style={{ color: GOLD }}>Profile</a> instead.
-        </p>
       </form>
     </div>
   );

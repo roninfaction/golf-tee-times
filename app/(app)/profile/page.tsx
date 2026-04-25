@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { Copy, Check, LogOut, ChevronRight, Bell, BellOff } from "lucide-react";
+import { AvatarUpload } from "@/components/AvatarUpload";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -12,11 +13,14 @@ const DIVIDER = "rgba(80,200,110,0.10)";
 const EMAIL_FORWARD_DOMAIN = process.env.NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN ?? "golfpack.app";
 
 export default function ProfilePage() {
+  const [userId, setUserId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [forwarderToken, setForwarderToken] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newPassword, setNewPassword] = useState("");
@@ -43,27 +47,33 @@ export default function ProfilePage() {
     );
 
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) { setLoading(false); return; }
-      fetch("/api/profile", { headers: { Authorization: `Bearer ${session.access_token}` } })
-        .then((r) => r.json())
-        .then((data) => {
-          setDisplayName(data.display_name ?? "");
-          setForwarderToken(data.forwarder_token ?? "");
-          setEmail(data.email ?? "");
-          setLoading(false);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setLoading(false); return; }
+      setEmail(user.email ?? "");
+      setUserId(user.id);
 
-          if (data.push_subscription) {
-            setNotifState("registered");
-          } else if (!("Notification" in window)) {
-            setNotifState("needs_enable");
-          } else if (Notification.permission === "denied") {
-            setNotifState("denied");
-          } else {
-            setNotifState("needs_enable");
+      supabase
+        .from("profiles")
+        .select("display_name, forwarder_token, push_subscription, avatar_url")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setDisplayName(data.display_name ?? "");
+            setForwarderToken(data.forwarder_token ?? "");
+            setAvatarUrl((data as { avatar_url?: string | null }).avatar_url ?? null);
+            if (data.push_subscription) {
+              setNotifState("registered");
+            } else if (!("Notification" in window)) {
+              setNotifState("needs_enable");
+            } else if (Notification.permission === "denied") {
+              setNotifState("denied");
+            } else {
+              setNotifState("needs_enable");
+            }
           }
-        })
-        .catch(() => setLoading(false));
+          setLoading(false);
+        });
     });
   }, []);
 
@@ -166,16 +176,42 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     setSaved(false);
+    setSaveError("");
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-      body: JSON.stringify({ display_name: displayName }),
-    });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setSaveError("Not logged in.");
+      setSaving(false);
+      return;
+    }
+    const { data: updated, error } = await supabase
+      .from("profiles")
+      .update({ display_name: displayName })
+      .eq("id", user.id)
+      .select("id");
+    if (error) {
+      setSaving(false);
+      setSaveError(`DB error: ${error.message}`);
+      return;
+    }
+    if (!updated || updated.length === 0) {
+      setSaving(false);
+      setSaveError("Profile not found — try signing out and back in.");
+      return;
+    }
+    // Read back to confirm the value actually persisted
+    const { data: verify } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .single();
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (verify?.display_name !== displayName) {
+      setSaveError(`Save reverted immediately — DB returned "${verify?.display_name}". Contact support.`);
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   }
 
   async function savePassword(e: React.FormEvent) {
@@ -207,8 +243,6 @@ export default function ProfilePage() {
     window.location.href = "/login";
   }
 
-  const initials = displayName ? displayName.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2) : "?";
-
   return (
     <div className="min-h-screen pb-52">
       <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
@@ -217,12 +251,14 @@ export default function ProfilePage() {
 
       <div className="px-4 pt-6 space-y-6">
         {/* Avatar */}
-        <div className="flex flex-col items-center py-2">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold mb-3" style={{ background: "rgba(201,168,76,0.18)", color: GOLD }}>
-            {loading ? "…" : initials}
-          </div>
+        <div className="flex flex-col items-center py-2 gap-2">
+          {loading ? (
+            <div className="w-20 h-20 rounded-full animate-pulse" style={{ background: "rgba(255,255,255,0.07)" }} />
+          ) : (
+            <AvatarUpload userId={userId} currentAvatarUrl={avatarUrl} displayName={displayName} />
+          )}
           <p className="text-white font-semibold text-lg">{loading ? "" : (displayName || "Set your name")}</p>
-          <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{email}</p>
+          <p className="text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>{email}</p>
         </div>
 
         {/* Display name */}
@@ -243,6 +279,7 @@ export default function ProfilePage() {
               {saved && <Check size={16} style={{ color: "#30D158" }} />}
             </button>
           </div>
+          {saveError && <p className="px-1 pt-2 text-xs" style={{ color: "#FF453A" }}>{saveError}</p>}
         </form>
 
         {/* Change password */}

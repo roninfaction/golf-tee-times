@@ -40,7 +40,7 @@ export default async function GroupPage() {
 
   const { data: members } = await svc
     .from("group_members")
-    .select("*, profile:profiles(id, display_name, email)")
+    .select("*, profile:profiles(id, display_name, email, avatar_url)")
     .eq("group_id", group.id)
     .order("joined_at", { ascending: true });
 
@@ -68,7 +68,7 @@ export default async function GroupPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Members</p>
           <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-            {(members ?? []).map((m: GroupMember & { profile: Profile }, i) => {
+            {(members ?? []).map((m: GroupMember & { profile: Profile & { avatar_url?: string | null } }, i) => {
               const isLast = i === (members ?? []).length - 1;
               const name = m.profile?.display_name || m.profile?.email || "Unknown";
               const initials = name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -78,9 +78,17 @@ export default async function GroupPage() {
                   className="flex items-center gap-3 px-4 py-3.5"
                   style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}
                 >
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)" }}>
-                    {initials}
-                  </div>
+                  {m.profile?.avatar_url ? (
+                    <img
+                      src={m.profile.avatar_url}
+                      alt={name}
+                      className="w-9 h-9 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)" }}>
+                      {initials}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">
                       {name}

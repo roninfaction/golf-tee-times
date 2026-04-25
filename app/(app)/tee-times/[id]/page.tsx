@@ -3,10 +3,11 @@ import { redirect, notFound } from "next/navigation";
 import { formatTeeDateLong, formatTeeTime } from "@/lib/format";
 import { RsvpButtons } from "@/components/RsvpButtons";
 import { InviteGuestButton } from "@/components/InviteGuestButton";
+import { InviteGroupButton } from "@/components/InviteGroupButton";
 import { DeleteTeeTimeButton } from "@/components/DeleteTeeTimeButton";
-import { ChevronLeft, Clock, Flag, Users, Hash, FileText } from "lucide-react";
+import { ChevronLeft, Clock, Flag, Users, Hash, FileText, Phone, Globe, MapPin } from "lucide-react";
 import Link from "next/link";
-import type { TeeTime, Rsvp, GuestInvite, Profile } from "@/lib/types";
+import type { TeeTime, Rsvp, GuestInvite, Profile, Course } from "@/lib/types";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -18,6 +19,29 @@ const statusConfig = {
   declined: { bg: "rgba(255,69,58,0.12)", color: "#FF453A", label: "Can't go" },
   pending:  { bg: "rgba(201,168,76,0.15)", color: GOLD, label: "Pending" },
 };
+
+function Avatar({ name, avatarUrl, size = 8 }: { name: string; avatarUrl?: string | null; size?: number }) {
+  const initials = name?.[0]?.toUpperCase() ?? "?";
+  const dim = `${size * 4}px`;
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="rounded-full object-cover shrink-0"
+        style={{ width: dim, height: dim }}
+      />
+    );
+  }
+  return (
+    <div
+      className="rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+      style={{ width: dim, height: dim, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.8)" }}
+    >
+      {initials}
+    </div>
+  );
+}
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -31,7 +55,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const { data: tt } = await svc
     .from("tee_times")
-    .select(`*, rsvps(*, profile:profiles(id, display_name)), guest_invites(*)`)
+    .select(`*, rsvps(*, profile:profiles(id, display_name, avatar_url)), guest_invites(*)`)
     .eq("id", id)
     .single();
 
@@ -39,21 +63,25 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const teeTime = tt as TeeTime & { rsvps: (Rsvp & { profile: Profile })[]; guest_invites: GuestInvite[] };
 
-  const isPast = new Date(teeTime.tee_datetime) < new Date();
+  // Access guard: user must be creator or have an RSVP
+  const hasAccess =
+    teeTime.created_by === user.id ||
+    teeTime.rsvps.some((r) => r.user_id === user.id);
+  if (!hasAccess) notFound();
 
-  // Auto-create a pending RSVP for group members who joined after this tee time was created
-  let myRsvp = teeTime.rsvps.find((r) => r.user_id === user.id);
-  if (!myRsvp && !isPast) {
-    const { data: newRsvp } = await svc
-      .from("rsvps")
-      .upsert({ tee_time_id: teeTime.id, user_id: user.id, status: "pending" }, { onConflict: "tee_time_id,user_id" })
-      .select("*, profile:profiles(id, display_name)")
-      .single();
-    if (newRsvp) {
-      teeTime.rsvps.push(newRsvp as Rsvp & { profile: Profile });
-      myRsvp = newRsvp as Rsvp & { profile: Profile };
-    }
+  // Fetch linked course if available
+  let course: Course | null = null;
+  if (teeTime.course_place_id) {
+    const { data: courseData } = await svc
+      .from("courses")
+      .select("*")
+      .eq("place_id", teeTime.course_place_id)
+      .maybeSingle();
+    course = courseData as Course | null;
   }
+
+  const isPast = new Date(teeTime.tee_datetime) < new Date();
+  const myRsvp = teeTime.rsvps.find((r) => r.user_id === user.id);
 
   const acceptedGroup = teeTime.rsvps.filter((r) => r.status === "accepted");
   const acceptedGuests = teeTime.guest_invites.filter((g) => g.status === "accepted");
@@ -66,19 +94,61 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
   return (
     <div className="min-h-screen pb-52">
       {/* Hero header */}
-      <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-        <Link href={backHref} className="inline-flex items-center gap-1 mb-4 text-sm font-medium" style={{ color: "#30D158" }}>
-          <ChevronLeft size={18} strokeWidth={2} />
-          {isPast ? "History" : "Schedule"}
-        </Link>
-        <h1 className="text-[26px] font-bold text-white tracking-tight leading-tight mb-1">{teeTime.course_name}</h1>
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
-          {formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}
-        </p>
-        {isPast && (
-          <span className="inline-block mt-2 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
-            Past tee time
-          </span>
+      <div className="relative pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+        {course?.photo_uri ? (
+          <>
+            <div className="relative h-56 w-full">
+              <img src={course.photo_uri} alt={teeTime.course_name} className="w-full h-full object-cover" />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.82) 100%)" }} />
+            </div>
+            <div className="absolute top-0 left-0 right-0 px-4 pt-12">
+              <div className="flex items-center justify-between mb-4">
+                <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>
+                  <ChevronLeft size={18} strokeWidth={2} />
+                  {isPast ? "History" : "Schedule"}
+                </Link>
+                {!isPast && teeTime.created_by === user.id && (
+                  <Link href={`/tee-times/${teeTime.id}/edit`} className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>
+                    Edit
+                  </Link>
+                )}
+              </div>
+            </div>
+            <div className="px-4 pt-3">
+              <h1 className="text-[26px] font-bold text-white tracking-tight leading-tight mb-1">{teeTime.course_name}</h1>
+              <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
+                {formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}
+              </p>
+              {isPast && (
+                <span className="inline-block mt-2 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
+                  Past tee time
+                </span>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="px-4 pt-12">
+            <div className="flex items-center justify-between mb-4">
+              <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: "#30D158" }}>
+                <ChevronLeft size={18} strokeWidth={2} />
+                {isPast ? "History" : "Schedule"}
+              </Link>
+              {!isPast && teeTime.created_by === user.id && (
+                <Link href={`/tee-times/${teeTime.id}/edit`} className="text-sm font-medium" style={{ color: GOLD }}>
+                  Edit
+                </Link>
+              )}
+            </div>
+            <h1 className="text-[26px] font-bold text-white tracking-tight leading-tight mb-1">{teeTime.course_name}</h1>
+            <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
+              {formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}
+            </p>
+            {isPast && (
+              <span className="inline-block mt-2 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
+                Past tee time
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -115,13 +185,55 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* RSVP — only for future tee times */}
-        {!isPast && (
+        {/* Course info card */}
+        {course && (course.phone || course.website || course.maps_url) && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Course info</p>
+            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              {course.phone && (
+                <a
+                  href={`tel:${course.phone}`}
+                  className="flex items-center gap-3 px-4 py-3.5"
+                  style={{ borderBottom: (course.website || course.maps_url) ? `0.5px solid ${DIVIDER}` : "none" }}
+                >
+                  <Phone size={15} style={{ color: GOLD, flexShrink: 0 }} />
+                  <span className="text-sm text-white">{course.phone}</span>
+                </a>
+              )}
+              {course.website && (
+                <a
+                  href={course.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3.5"
+                  style={{ borderBottom: course.maps_url ? `0.5px solid ${DIVIDER}` : "none" }}
+                >
+                  <Globe size={15} style={{ color: GOLD, flexShrink: 0 }} />
+                  <span className="text-sm text-white truncate">{course.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
+                </a>
+              )}
+              {course.maps_url && (
+                <a
+                  href={course.maps_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3.5"
+                >
+                  <MapPin size={15} style={{ color: GOLD, flexShrink: 0 }} />
+                  <span className="text-sm text-white">Get directions</span>
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* RSVP — only for future tee times where user has an RSVP row */}
+        {!isPast && myRsvp && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Your response</p>
             <RsvpButtons
               teeTimeId={teeTime.id}
-              currentStatus={myRsvp?.status ?? "pending"}
+              currentStatus={myRsvp.status}
             />
           </div>
         )}
@@ -138,9 +250,10 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
               return (
                 <div key={rsvp.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.8)" }}>
-                      {rsvp.profile?.display_name?.[0]?.toUpperCase() ?? "?"}
-                    </div>
+                    <Avatar
+                      name={rsvp.profile?.display_name ?? "?"}
+                      avatarUrl={(rsvp.profile as Profile & { avatar_url?: string | null })?.avatar_url}
+                    />
                     <span className="text-sm font-medium text-white">
                       {rsvp.profile?.display_name ?? "Unknown"}
                       {rsvp.user_id === user.id && <span className="text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>you</span>}
@@ -158,7 +271,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
               return (
                 <div key={guest.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold" style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}>
                       {guest.accepted_name?.[0]?.toUpperCase() ?? "G"}
                     </div>
                     <div>
@@ -183,7 +296,12 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Invite guest */}
+        {/* Invite Group — creator only, future tee times */}
+        {!isPast && teeTime.created_by === user.id && (
+          <InviteGroupButton teeTimeId={teeTime.id} />
+        )}
+
+        {/* Invite guest — open spots only */}
         {!isPast && openSpots > 0 && (
           <InviteGuestButton teeTimeId={teeTime.id} openSpots={openSpots} />
         )}

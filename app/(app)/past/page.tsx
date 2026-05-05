@@ -9,7 +9,15 @@ const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 const DIVIDER = "rgba(80,200,110,0.10)";
 
-export default async function PastPage() {
+const PAGE_SIZE = 20;
+
+export default async function PastPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(0, parseInt(pageParam ?? "0", 10));
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -42,7 +50,8 @@ export default async function PastPage() {
     .select("*, rsvps(user_id, status), guest_invites(status)")
     .lt("tee_datetime", new Date().toISOString())
     .order("tee_datetime", { ascending: false })
-    .limit(30);
+    .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
 
   if (invitedIds.length > 0) {
     teeTimesQuery = teeTimesQuery.or(`created_by.eq.${user.id},id.in.(${invitedIds.join(",")})`);
@@ -51,6 +60,20 @@ export default async function PastPage() {
   }
 
   const { data: teeTimes } = await teeTimesQuery;
+
+  // Batch-fetch user's scores for visible tee times
+  const teeTimeIds = (teeTimes ?? []).map((tt: { id: string }) => tt.id);
+  const scoresByTeeTime = new Map<string, { gross_score: number; net_score: number | null }>();
+  if (teeTimeIds.length > 0) {
+    const { data: myScores } = await svc
+      .from("round_scores")
+      .select("tee_time_id, gross_score, net_score")
+      .eq("user_id", user.id)
+      .in("tee_time_id", teeTimeIds);
+    for (const s of myScores ?? []) {
+      scoresByTeeTime.set(s.tee_time_id, { gross_score: s.gross_score, net_score: s.net_score });
+    }
+  }
 
   return (
     <div className="min-h-screen pb-52">
@@ -72,12 +95,7 @@ export default async function PastPage() {
                 tt.rsvps.filter((r: Rsvp) => r.status === "accepted").length +
                 tt.guest_invites.filter((g: GuestInvite) => g.status === "accepted").length;
               const isLast = i === teeTimes.length - 1;
-
-              const badgeStyle = myRsvp?.status === "accepted"
-                ? { background: "rgba(48,209,88,0.12)", color: "#30D158" }
-                : myRsvp?.status === "declined"
-                ? { background: "rgba(255,69,58,0.1)", color: "#FF453A" }
-                : { background: "rgba(201,168,76,0.12)", color: GOLD };
+              const score = scoresByTeeTime.get(tt.id);
 
               return (
                 <Link
@@ -92,14 +110,40 @@ export default async function PastPage() {
                       {formatTeeDate(tt.tee_datetime)} · {formatTeeTime(tt.tee_datetime)} · {tt.holes}H · {acceptedCount} played
                     </p>
                   </div>
-                  {myRsvp && (
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full ml-3 shrink-0" style={badgeStyle}>
-                      {myRsvp.status === "accepted" ? "Played" : myRsvp.status === "declined" ? "Skipped" : "—"}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 ml-3 shrink-0">
+                    {score && (
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-white">{score.gross_score}</p>
+                        {score.net_score !== null && score.net_score !== score.gross_score && (
+                          <p className="text-xs" style={{ color: "#30D158" }}>Net {score.net_score}</p>
+                        )}
+                      </div>
+                    )}
+                    {myRsvp && !score && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={myRsvp.status === "accepted"
+                          ? { background: "rgba(48,209,88,0.12)", color: "#30D158" }
+                          : myRsvp.status === "declined"
+                          ? { background: "rgba(255,69,58,0.1)", color: "#FF453A" }
+                          : { background: "rgba(201,168,76,0.12)", color: GOLD }}>
+                        {myRsvp.status === "accepted" ? "Played" : myRsvp.status === "declined" ? "Skipped" : "—"}
+                      </span>
+                    )}
+                  </div>
                 </Link>
               );
             })}
+          </div>
+        )}
+        {teeTimes && teeTimes.length === PAGE_SIZE && (
+          <div className="mt-4 text-center">
+            <Link
+              href={`/past?page=${page + 1}`}
+              className="text-sm font-medium px-5 py-2.5 rounded-xl inline-block"
+              style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}
+            >
+              Load more
+            </Link>
           </div>
         )}
       </div>

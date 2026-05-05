@@ -27,6 +27,10 @@ export default function ProfilePage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState("");
+  const [handicapIndex, setHandicapIndex] = useState("");
+  const [handicapSaving, setHandicapSaving] = useState(false);
+  const [handicapSaved, setHandicapSaved] = useState(false);
+  const [handicapError, setHandicapError] = useState("");
 
   // notifState: "unknown" = loading, "registered" = push_subscription saved on server,
   // "needs_enable" = permission not granted yet, "denied" = OS blocked
@@ -54,7 +58,7 @@ export default function ProfilePage() {
 
       supabase
         .from("profiles")
-        .select("display_name, forwarder_token, push_subscription, avatar_url")
+        .select("display_name, forwarder_token, push_subscription, avatar_url, ghin_handicap_index")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
@@ -62,6 +66,9 @@ export default function ProfilePage() {
             setDisplayName(data.display_name ?? "");
             setForwarderToken(data.forwarder_token ?? "");
             setAvatarUrl((data as { avatar_url?: string | null }).avatar_url ?? null);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const hi = (data as any).ghin_handicap_index;
+            if (hi !== null && hi !== undefined) setHandicapIndex(String(hi));
             if (data.push_subscription) {
               setNotifState("registered");
             } else if (!("Notification" in window)) {
@@ -214,6 +221,28 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveHandicap(e: React.FormEvent) {
+    e.preventDefault();
+    setHandicapSaving(true);
+    setHandicapError("");
+    setHandicapSaved(false);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch("/api/profile/handicap", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      body: JSON.stringify({ handicap_index: handicapIndex === "" ? null : parseFloat(handicapIndex) }),
+    });
+    setHandicapSaving(false);
+    if (!res.ok) {
+      const err = await res.json();
+      setHandicapError(err.error ?? "Failed to save");
+    } else {
+      setHandicapSaved(true);
+      setTimeout(() => setHandicapSaved(false), 2000);
+    }
+  }
+
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
     setPasswordSaving(true);
@@ -306,6 +335,33 @@ export default function ProfilePage() {
               {passwordSaved && <Check size={16} style={{ color: "#30D158" }} />}
             </button>
           </div>
+        </form>
+
+        {/* Handicap index */}
+        <form onSubmit={saveHandicap}>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Handicap index</p>
+          <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="54"
+              value={handicapIndex}
+              onChange={e => setHandicapIndex(e.target.value)}
+              placeholder="e.g. 12.4"
+              className="w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20"
+              style={{ borderBottom: `0.5px solid ${DIVIDER}` }}
+            />
+            <p className="px-4 py-2 text-xs" style={{ color: "rgba(255,255,255,0.3)", borderBottom: `0.5px solid ${DIVIDER}` }}>
+              Find yours at usga.org, the GHIN app, or ask your club pro.
+            </p>
+            <button type="submit" disabled={handicapSaving} className="w-full px-4 py-3.5 text-sm font-semibold text-left flex items-center justify-between" style={{ color: "#30D158" }}>
+              <span>{handicapSaved ? "Saved!" : handicapSaving ? "Saving…" : "Save handicap"}</span>
+              {!handicapSaving && !handicapSaved && <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.2)" }} />}
+              {handicapSaved && <Check size={16} style={{ color: "#30D158" }} />}
+            </button>
+          </div>
+          {handicapError && <p className="px-1 pt-2 text-xs" style={{ color: "#FF453A" }}>{handicapError}</p>}
         </form>
 
         {/* Email forwarding */}

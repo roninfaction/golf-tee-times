@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("tee_times")
-    .select("*, rsvps(*, profile:profiles(id, display_name)), guest_invites(*)")
+    .select("*, group:groups(timezone), rsvps(*, profile:profiles(id, display_name)), guest_invites(*)")
     .eq("id", id)
     .single();
 

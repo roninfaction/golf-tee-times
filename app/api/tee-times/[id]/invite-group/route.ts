@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: tt } = await svc
     .from("tee_times")
-    .select("id, created_by, group_id, course_name, tee_datetime")
+    .select("id, created_by, group_id, course_name, tee_datetime, group:groups(timezone)")
     .eq("id", teeTimeId)
     .single();
 
@@ -55,12 +55,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   const subscriptions = (profiles ?? []).map((p: any) => p.push_subscription).filter(Boolean);
 
   if (subscriptions.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tz = (tt as any).group?.timezone ?? "America/Los_Angeles";
     const teeDate = new Date(tt.tee_datetime);
     const dateStr = teeDate.toLocaleDateString("en-US", {
-      timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric",
+      timeZone: tz, weekday: "short", month: "short", day: "numeric",
     });
     const timeStr = teeDate.toLocaleTimeString("en-US", {
-      timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
     });
     await sendPush({
       subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],

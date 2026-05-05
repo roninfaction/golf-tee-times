@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
-import { pacificToUtcIso } from "@/lib/timezone";
+import { localToUtcIso } from "@/lib/timezone";
 import { CourseAutocomplete } from "@/components/CourseAutocomplete";
 import type { CourseDetails } from "@/lib/google-places";
 
@@ -18,6 +18,32 @@ export default function NewTeeTimePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [groupTz, setGroupTz] = useState("America/Los_Angeles");
+  const [defaultInterval, setDefaultInterval] = useState(10);
+  // After first creation: id of the created tee time + list of linked ones
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [linkedIds, setLinkedIds] = useState<string[]>([]);
+  const [addingLinked, setAddingLinked] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      supabase
+        .from("group_members")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .select("group:groups(timezone,default_tee_interval)")
+        .eq("user_id", session.user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const g = (data as any)?.group;
+          if (g?.timezone) setGroupTz(g.timezone);
+          if (g?.default_tee_interval) setDefaultInterval(g.default_tee_interval);
+        });
+    });
+  }, []);
+
   const [courseName, setCourseName] = useState("");
   const [coursePlaceId, setCoursePlaceId] = useState<string | null>(null);
   const [courseDetails, setCourseDetails] = useState<CourseDetails | null>(null);
@@ -28,39 +54,65 @@ export default function NewTeeTimePage() {
   const [notes, setNotes] = useState("");
   const [confirmationNumber, setConfirmationNumber] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  async function postTeeTime(parentId: string | null, datetime: string, slotOrder: number) {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/tee-times", {
+    return fetch("/api/tee-times", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
       body: JSON.stringify({
         course_name: courseName,
         course_place_id: coursePlaceId ?? null,
         course_details: courseDetails ?? null,
-        tee_datetime: pacificToUtcIso(teeDate, teeTime),
+        tee_datetime: datetime,
         holes,
         max_players: maxPlayers,
         notes: notes || null,
         confirmation_number: confirmationNumber || null,
+        parent_tee_time_id: parentId,
+        slot_order: slotOrder,
       }),
     });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const datetime = localToUtcIso(teeDate, teeTime, groupTz);
+    const res = await postTeeTime(null, datetime, 0);
     setLoading(false);
     if (res.ok) {
       const data = await res.json();
-      router.push(`/tee-times/${data.id}`);
+      setCreatedId(data.id);
+      setLinkedIds([data.id]);
     } else {
       const err = await res.json();
       setError(err.error ?? "Something went wrong");
     }
   }
 
+  async function addLinkedSlot(intervalMin: number) {
+    if (!createdId || linkedIds.length >= 6) return;
+    setAddingLinked(true);
+    // Compute time of next slot based on the last linked slot
+    const lastUtc = new Date(localToUtcIso(teeDate, teeTime, groupTz));
+    lastUtc.setMinutes(lastUtc.getMinutes() + intervalMin * linkedIds.length);
+    const res = await postTeeTime(createdId, lastUtc.toISOString(), linkedIds.length);
+    setAddingLinked(false);
+    if (res.ok) {
+      const data = await res.json();
+      setLinkedIds(prev => [...prev, data.id]);
+    }
+  }
+
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = tomorrow.toISOString().split("T")[0];
+  const minDate = [
+    tomorrow.getFullYear(),
+    String(tomorrow.getMonth() + 1).padStart(2, "0"),
+    String(tomorrow.getDate()).padStart(2, "0"),
+  ].join("-");
 
   const fieldStyle = "w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20";
 
@@ -140,7 +192,7 @@ export default function NewTeeTimePage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Max players</p>
           <div className="flex gap-3">
-            {[2, 3, 4].map((n) => (
+            {[2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 type="button"
@@ -184,19 +236,72 @@ export default function NewTeeTimePage() {
 
         {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-4 rounded-2xl text-base font-semibold text-black transition-opacity"
-          style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}
-        >
-          {loading ? "Adding…" : "Add Tee Time"}
-        </button>
+        {!createdId ? (
+          <>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl text-base font-semibold text-black transition-opacity"
+              style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}
+            >
+              {loading ? "Adding…" : "Add Tee Time"}
+            </button>
+            <p className="text-xs text-center pb-2" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Got a confirmation email? Forward it to your GolfPack address in{" "}
+              <a href="/profile" style={{ color: GOLD }}>Profile</a> instead.
+            </p>
+          </>
+        ) : (
+          <div className="space-y-4">
+            {/* Slot list */}
+            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              {linkedIds.map((lid, i) => (
+                <div key={lid} className="flex items-center justify-between px-4 py-3" style={{ borderBottom: i < linkedIds.length - 1 ? `0.5px solid ${DIVIDER}` : "none" }}>
+                  <span className="text-sm text-white">Slot {i + 1}</span>
+                  <span className="text-xs font-semibold" style={{ color: "#30D158" }}>Added ✓</span>
+                </div>
+              ))}
+            </div>
 
-        <p className="text-xs text-center pb-2" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Got a confirmation email? Forward it to your GolfPack address in{" "}
-          <a href="/profile" style={{ color: GOLD }}>Profile</a> instead.
-        </p>
+            {/* Add another slot */}
+            {linkedIds.length < 6 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
+                  Add another tee time
+                </p>
+                <div className="flex gap-2">
+                  {[8, 10, 12, 15].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={addingLinked}
+                      onClick={() => addLinkedSlot(n)}
+                      className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                      style={{
+                        background: defaultInterval === n ? "rgba(201,168,76,0.15)" : CARD_BG,
+                        border: `0.5px solid ${defaultInterval === n ? "rgba(201,168,76,0.4)" : CARD_BORDER}`,
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
+                      +{n}m
+                    </button>
+                  ))}
+                </div>
+                {addingLinked && <p className="text-xs mt-2 px-1" style={{ color: "rgba(255,255,255,0.35)" }}>Adding slot…</p>}
+              </div>
+            )}
+
+            {/* Done */}
+            <button
+              type="button"
+              onClick={() => router.push(`/tee-times/${createdId}`)}
+              className="w-full py-4 rounded-2xl text-base font-semibold text-black"
+              style={{ background: "#30D158" }}
+            >
+              Done — view tee time{linkedIds.length > 1 ? "s" : ""}
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

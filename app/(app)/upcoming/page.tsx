@@ -1,10 +1,12 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { formatTeeTime } from "@/lib/format";
 import { clsx } from "clsx";
 import type { TeeTime, Rsvp, GuestInvite } from "@/lib/types";
 import { Plus } from "lucide-react";
+import { GroupSwitcher } from "@/components/GroupSwitcher";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -12,40 +14,38 @@ const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 
-const TZ = "America/Los_Angeles";
-
-function getPacificDateStr(d: Date): string {
+function getLocalDateStr(d: Date, tz: string): string {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-function getWeekDayStrs(referenceDate: Date): string[] {
-  const todayStr = getPacificDateStr(referenceDate);
-  const dayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" }).format(referenceDate);
+function getWeekDayStrs(referenceDate: Date, tz: string): string[] {
+  const todayStr = getLocalDateStr(referenceDate, tz);
+  const dayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(referenceDate);
   const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayOfWeek);
   const diff = dayIdx === 0 ? -6 : 1 - dayIdx;
   return Array.from({ length: 7 }, (_, i) => {
     const base = new Date(todayStr + "T12:00:00Z");
     base.setUTCDate(base.getUTCDate() + diff + i);
-    return getPacificDateStr(base);
+    return getLocalDateStr(base, tz);
   });
 }
 
-function daysUntil(isoString: string): string {
+function daysUntil(isoString: string, tz: string): string {
   const d = new Date(isoString);
   const now = new Date();
-  const todayStr = getPacificDateStr(now);
-  const teeStr = getPacificDateStr(d);
+  const todayStr = getLocalDateStr(now, tz);
+  const teeStr = getLocalDateStr(d, tz);
   const diff = Math.round(
     (new Date(teeStr).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24)
   );
   if (diff === 0) return "Today";
   if (diff === 1) return "Tomorrow";
   if (diff < 7) return `In ${diff} days`;
-  return d.toLocaleDateString("en-US", { timeZone: TZ, month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric" });
 }
 
 export default async function UpcomingPage() {
@@ -55,11 +55,22 @@ export default async function UpcomingPage() {
 
   const svc = createServiceClient();
 
-  const { data: membership } = await svc
+  // Resolve active group: cookie → profile.active_group_id → oldest membership
+  const cookieStore = await cookies();
+  const cookieGroupId = cookieStore.get("golfpack_active_group")?.value;
+
+  let membershipQuery = svc
     .from("group_members")
-    .select("group_id, group:groups(id, name)")
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .select("group_id, group:groups(id, name, timezone)")
+    .eq("user_id", user.id);
+
+  if (cookieGroupId) {
+    membershipQuery = membershipQuery.eq("group_id", cookieGroupId);
+  } else {
+    membershipQuery = membershipQuery.order("joined_at", { ascending: true });
+  }
+
+  const { data: membership } = await membershipQuery.maybeSingle();
 
   const groupId = membership?.group_id;
 
@@ -95,9 +106,11 @@ export default async function UpcomingPage() {
   let teeTimesQuery = svc
     .from("tee_times")
     .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
+    .eq("group_id", groupId)
     .gte("tee_datetime", today.toISOString())
     .lte("tee_datetime", in60.toISOString())
-    .order("tee_datetime", { ascending: true });
+    .order("tee_datetime", { ascending: true })
+    .limit(50);
 
   if (invitedIds.length > 0) {
     teeTimesQuery = teeTimesQuery.or(`created_by.eq.${user.id},id.in.(${invitedIds.join(",")})`);
@@ -114,10 +127,11 @@ export default async function UpcomingPage() {
     return { ...tt, my_rsvp: myRsvp, accepted_count: acceptedCount + guestAcceptedCount };
   });
 
-  const weekDayStrs = getWeekDayStrs(today);
-  const todayPacificStr = getPacificDateStr(today);
+  const groupTz = (membership?.group as unknown as { timezone?: string })?.timezone ?? "America/Los_Angeles";
+  const weekDayStrs = getWeekDayStrs(today, groupTz);
+  const todayLocalStr = getLocalDateStr(today, groupTz);
   const monthLabel = new Date(weekDayStrs[0] + "T12:00:00Z").toLocaleDateString("en-US", {
-    timeZone: TZ, month: "long", year: "numeric",
+    timeZone: groupTz, month: "long", year: "numeric",
   });
 
   return (
@@ -126,9 +140,10 @@ export default async function UpcomingPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[28px] font-bold text-white tracking-tight">Schedule</h1>
-          <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
-            {(membership?.group as unknown as { name: string })?.name ?? "Your Group"}
-          </p>
+          <GroupSwitcher
+            activeGroupId={groupId}
+            groupName={(membership?.group as unknown as { name: string })?.name ?? "Your Group"}
+          />
         </div>
         <Link
           href="/tee-times/new"
@@ -144,9 +159,9 @@ export default async function UpcomingPage() {
         <p className="text-xs font-semibold mb-3 px-0.5 uppercase tracking-wide" style={{ color: GOLD }}>{monthLabel}</p>
         <div className="grid grid-cols-7 gap-1">
           {weekDayStrs.map((dayStr, i) => {
-            const isToday = dayStr === todayPacificStr;
+            const isToday = dayStr === todayLocalStr;
             const dayNum = parseInt(dayStr.slice(8), 10);
-            const dayTimes = rows.filter(tt => getPacificDateStr(new Date(tt.tee_datetime)) === dayStr);
+            const dayTimes = rows.filter(tt => getLocalDateStr(new Date(tt.tee_datetime), groupTz) === dayStr);
             return (
               <div key={i} className="flex flex-col items-center gap-1.5">
                 <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>{DAY_LABELS[i]}</span>
@@ -205,7 +220,7 @@ export default async function UpcomingPage() {
                     <img src={photoUri} alt={tt.course_name} className="w-full h-full object-cover" />
                     <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.65))" }} />
                     <p className="absolute bottom-2.5 left-4 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.7)" }}>
-                      {daysUntil(tt.tee_datetime)}
+                      {daysUntil(tt.tee_datetime, groupTz)}
                     </p>
                   </div>
                 )}
@@ -213,7 +228,7 @@ export default async function UpcomingPage() {
                   <div className="flex-1 min-w-0">
                     {!photoUri && (
                       <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: GOLD }}>
-                        {daysUntil(tt.tee_datetime)}
+                        {daysUntil(tt.tee_datetime, groupTz)}
                       </p>
                     )}
                     <p className="font-semibold text-white text-[16px] truncate tracking-tight">{tt.course_name}</p>

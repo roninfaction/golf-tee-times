@@ -3,9 +3,27 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { parseTeeTimeEmail } from "@/lib/email-parser";
 import { searchCourseByName } from "@/lib/google-places";
 import { sendPush } from "@/lib/onesignal";
-import { pacificToUtcIso } from "@/lib/timezone";
+import { localToUtcIso } from "@/lib/timezone";
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) diff |= aBytes[i] ^ bBytes[i];
+  return diff === 0;
+}
 
 export async function POST(request: NextRequest) {
+  const secret = process.env.RESEND_INBOUND_SIGNING_SECRET;
+  if (secret) {
+    const provided = request.headers.get("x-webhook-secret") ?? "";
+    if (!timingSafeEqual(provided, secret)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   let payload: Record<string, unknown>;
   try {
     payload = await request.json();
@@ -33,11 +51,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unknown forwarder token", token: forwarderToken }, { status: 200 });
   }
 
-  const { data: membership } = await svc
-    .from("group_members")
-    .select("group_id")
-    .eq("user_id", profile.id)
+  // Prefer the user's designated forwarding group; fall back to oldest membership
+  const { data: profileFull } = await svc
+    .from("profiles")
+    .select("forwarding_group_id")
+    .eq("id", profile.id)
     .maybeSingle();
+
+  let membershipQuery = svc
+    .from("group_members")
+    .select("group_id, group:groups(timezone)")
+    .eq("user_id", profile.id)
+    .order("joined_at", { ascending: true });
+
+  if (profileFull?.forwarding_group_id) {
+    membershipQuery = membershipQuery.eq("group_id", profileFull.forwarding_group_id);
+  }
+
+  const { data: membership } = await membershipQuery.maybeSingle();
 
   if (!membership) {
     return NextResponse.json({ error: "User has no group" }, { status: 200 });
@@ -69,7 +100,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, parsed: false });
   }
 
-  const tee_datetime = pacificToUtcIso(parsed.tee_date, parsed.tee_time);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groupTz = (membership as any).group?.timezone ?? "America/Los_Angeles";
+  const tee_datetime = localToUtcIso(parsed.tee_date, parsed.tee_time, groupTz);
 
   // Try to match course via Google Places (best-effort, non-blocking)
   let coursePlaceId: string | null = null;
@@ -131,8 +164,8 @@ export async function POST(request: NextRequest) {
 
   if (subscriptions.length > 0) {
     const teeDate = new Date(tee_datetime);
-    const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", weekday: "short", month: "short", day: "numeric" });
-    const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true });
+    const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: groupTz, weekday: "short", month: "short", day: "numeric" });
+    const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: groupTz, hour: "numeric", minute: "2-digit", hour12: true });
     await sendPush({
       subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
       title: "New tee time added! ⛳",

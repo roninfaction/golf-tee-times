@@ -5,9 +5,11 @@ import { RsvpButtons } from "@/components/RsvpButtons";
 import { InviteGuestButton } from "@/components/InviteGuestButton";
 import { InviteGroupButton } from "@/components/InviteGroupButton";
 import { DeleteTeeTimeButton } from "@/components/DeleteTeeTimeButton";
-import { ChevronLeft, Clock, Flag, Users, Hash, FileText, Phone, Globe, MapPin } from "lucide-react";
+import { ChevronLeft, Clock, Flag, Users, Hash, FileText, Phone, Globe, MapPin, Link2 } from "lucide-react";
 import Link from "next/link";
 import type { TeeTime, Rsvp, GuestInvite, Profile, Course } from "@/lib/types";
+import { ScoreSection } from "@/components/ScoreSection";
+import { TeamPlaySection } from "@/components/TeamPlaySection";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -55,7 +57,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const { data: tt } = await svc
     .from("tee_times")
-    .select(`*, rsvps(*, profile:profiles(id, display_name, avatar_url)), guest_invites(*)`)
+    .select(`*, rsvps(*, team_id, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)), guest_invites(*)`)
     .eq("id", id)
     .single();
 
@@ -79,6 +81,16 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
       .maybeSingle();
     course = courseData as Course | null;
   }
+
+  // Fetch linked tee times (siblings sharing same parent, or children of this one)
+  const parentId = (teeTime as TeeTime & { parent_tee_time_id?: string | null }).parent_tee_time_id ?? id;
+  const { data: linkedRaw } = await svc
+    .from("tee_times")
+    .select("id, tee_datetime, max_players, rsvps(status), guest_invites(status)")
+    .or(`parent_tee_time_id.eq.${parentId},id.eq.${parentId}`)
+    .neq("id", id)
+    .order("tee_datetime", { ascending: true });
+  const linkedTimes = (linkedRaw ?? []) as (TeeTime & { rsvps: { status: string }[]; guest_invites: { status: string }[] })[];
 
   const isPast = new Date(teeTime.tee_datetime) < new Date();
   const myRsvp = teeTime.rsvps.find((r) => r.user_id === user.id);
@@ -247,6 +259,8 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             {teeTime.rsvps.map((rsvp, i) => {
               const cfg = statusConfig[rsvp.status];
               const isLast = i === teeTime.rsvps.length - 1 && acceptedGuests.length === 0;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const handicapIndex = (rsvp.profile as any)?.ghin_handicap_index as number | null | undefined;
               return (
                 <div key={rsvp.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                   <div className="flex items-center gap-3">
@@ -254,10 +268,15 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
                       name={rsvp.profile?.display_name ?? "?"}
                       avatarUrl={(rsvp.profile as Profile & { avatar_url?: string | null })?.avatar_url}
                     />
-                    <span className="text-sm font-medium text-white">
-                      {rsvp.profile?.display_name ?? "Unknown"}
-                      {rsvp.user_id === user.id && <span className="text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>you</span>}
-                    </span>
+                    <div>
+                      <span className="text-sm font-medium text-white">
+                        {rsvp.profile?.display_name ?? "Unknown"}
+                        {rsvp.user_id === user.id && <span className="text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>you</span>}
+                      </span>
+                      {handicapIndex != null && (
+                        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>HCP {handicapIndex}</p>
+                      )}
+                    </div>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
                     {cfg.label}
@@ -296,6 +315,24 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           )}
         </div>
 
+        {/* Team play — future tee times with ≥4 confirmed or invited */}
+        {teeTime.max_players >= 4 && (
+          <TeamPlaySection
+            teeTimeId={teeTime.id}
+            isCreator={teeTime.created_by === user.id}
+            currentFormat={(teeTime as TeeTime & { format?: string | null }).format ?? null}
+            rsvps={teeTime.rsvps.map(r => ({
+              id: r.id,
+              user_id: r.user_id,
+              status: r.status,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              profile: { display_name: r.profile?.display_name ?? "?", avatar_url: (r.profile as any)?.avatar_url ?? null },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              team_id: (r as any).team_id ?? null,
+            }))}
+          />
+        )}
+
         {/* Invite Group — creator only, future tee times */}
         {!isPast && teeTime.created_by === user.id && (
           <InviteGroupButton teeTimeId={teeTime.id} />
@@ -311,6 +348,41 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           <div className="pt-2">
             <DeleteTeeTimeButton teeTimeId={teeTime.id} />
           </div>
+        )}
+
+        {/* Linked tee times — other slots in the same bulk booking */}
+        {linkedTimes.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1 flex items-center gap-1.5" style={{ color: GOLD }}>
+              <Link2 size={12} />
+              Linked tee times
+            </p>
+            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              {linkedTimes.map((lt, i) => {
+                const accepted = lt.rsvps.filter(r => r.status === "accepted").length
+                  + lt.guest_invites.filter(g => g.status === "accepted").length;
+                const isLast = i === linkedTimes.length - 1;
+                return (
+                  <Link
+                    key={lt.id}
+                    href={`/tee-times/${lt.id}`}
+                    className="flex items-center justify-between px-4 py-3.5 transition-opacity active:opacity-70"
+                    style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}
+                  >
+                    <span className="text-sm text-white">{formatTeeTime(lt.tee_datetime)}</span>
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                      {accepted}/{lt.max_players} confirmed
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Score section — past tee times where user played */}
+        {isPast && myRsvp?.status === "accepted" && (
+          <ScoreSection teeTimeId={teeTime.id} userId={user.id} />
         )}
       </div>
     </div>

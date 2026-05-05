@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 // Serwist disabled — we use a hand-written public/sw.js instead.
 // The Serwist runtime was causing the SW to hang in "installing" on iOS.
@@ -9,15 +10,12 @@ const withSerwist = withSerwistInit({
   disable: true,
 });
 
-const nextConfig: NextConfig = {
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: "https://drnbwzzzlbxpcymnwxmv.supabase.co",
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRybmJ3enp6bGJ4cGN5bW53eG12Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTc5OTIsImV4cCI6MjA4ODY3Mzk5Mn0.TiMghSrdhaU0IzyvKOd2Qxv9lSauEW_tzN6MYUNWpTE",
-    NEXT_PUBLIC_APP_URL: "https://golfpack.app",
-    NEXT_PUBLIC_ONESIGNAL_APP_ID: "f59a48aa-0ce4-4992-a7b8-55a612c6a7d6",
-    NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN: "golfpack.app",
-    NEXT_PUBLIC_VAPID_PUBLIC_KEY: "BPQO5XOm1mAH6bv9IBuxenGwzD-VGrEYmFkJ7rVmC09HVMfDYoLfTtk8mxbZI5fWYnAefa4PLkx2awkaIDb1Jnk",
-  },
-};
+// NEXT_PUBLIC_* vars must be set via Cloudflare Pages env vars (prod/staging dashboards)
+// or .env.local for local dev. Do NOT hardcode them here — they bake into the build
+// artifact and prevent staging from using its own Supabase project.
+const nextConfig: NextConfig = {};
 
-export default withSerwist(nextConfig);
+export default withSentryConfig(withSerwist(nextConfig), {
+  silent: true,
+  telemetry: false,
+});

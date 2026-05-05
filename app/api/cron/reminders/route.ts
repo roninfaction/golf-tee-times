@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
   const svc = createServiceClient();
   const now = new Date();
 
-  // Helper: find tee times within a time window that haven't been notified
+  // Helper: find tee times within a time window that haven't been notified.
+  // Uses 3 batched queries instead of 2N+1 to avoid N+1 at scale.
   async function processReminders(
     windowMinutes: number,
     sentFlag: "reminder_24h_sent" | "reminder_2h_sent",
@@ -25,39 +26,55 @@ export async function POST(request: NextRequest) {
 
     const { data: teeTimes } = await svc
       .from("tee_times")
-      .select("id, course_name, tee_datetime, group_id")
+      .select("id, course_name, tee_datetime, group:groups(timezone)")
       .gte("tee_datetime", windowStart.toISOString())
       .lte("tee_datetime", windowEnd.toISOString())
-      .eq(sentFlag, false);
+      .eq(sentFlag, false)
+      .limit(100);
 
     if (!teeTimes?.length) return 0;
 
+    const teeTimeIds = teeTimes.map((tt: { id: string }) => tt.id);
+
+    // Batch query 1: all RSVPs for all matching tee times
+    const { data: allRsvps } = await svc
+      .from("rsvps")
+      .select("tee_time_id, user_id")
+      .in("tee_time_id", teeTimeIds)
+      .in("status", ["accepted", "pending"]);
+
+    // Batch query 2: all profiles for all relevant users
+    const allUserIds = [...new Set((allRsvps ?? []).map((r: { user_id: string }) => r.user_id))];
+    const { data: allProfiles } = allUserIds.length
+      ? await svc
+          .from("profiles")
+          .select("id, push_subscription")
+          .in("id", allUserIds)
+          .not("push_subscription", "is", null)
+      : { data: [] };
+
+    // Build lookup maps in memory
+    const rsvpsByTeeTime = new Map<string, string[]>();
+    for (const r of (allRsvps ?? []) as { tee_time_id: string; user_id: string }[]) {
+      const list = rsvpsByTeeTime.get(r.tee_time_id) ?? [];
+      list.push(r.user_id);
+      rsvpsByTeeTime.set(r.tee_time_id, list);
+    }
+    const pushByUserId = new Map<string, unknown>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const p of (allProfiles ?? []) as any[]) {
+      if (p.push_subscription) pushByUserId.set(p.id, p.push_subscription);
+    }
+
     let sent = 0;
-    for (const tt of teeTimes) {
-      // Get all RSVPs that are accepted or pending (remind everyone who hasn't declined)
-      const { data: rsvps } = await svc
-        .from("rsvps")
-        .select("user_id")
-        .eq("tee_time_id", tt.id)
-        .in("status", ["accepted", "pending"]);
-
-      const userIds = (rsvps ?? []).map((r: { user_id: string }) => r.user_id);
-      if (!userIds.length) continue;
-
-      const { data: profiles } = await svc
-        .from("profiles")
-        .select("push_subscription")
-        .in("id", userIds)
-        .not("push_subscription", "is", null);
-
-      const subscriptions = (profiles ?? [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((p: any) => p.push_subscription)
-        .filter(Boolean);
+    for (const tt of teeTimes as { id: string; course_name: string; tee_datetime: string; group?: { timezone?: string } }[]) {
+      const userIds = rsvpsByTeeTime.get(tt.id) ?? [];
+      const subscriptions = userIds.map(uid => pushByUserId.get(uid)).filter(Boolean);
 
       if (subscriptions.length > 0) {
+        const tz = tt.group?.timezone ?? "America/Los_Angeles";
         const teeDate = new Date(tt.tee_datetime);
-        const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", hour12: true });
+        const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true });
 
         await sendPush({
           subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],

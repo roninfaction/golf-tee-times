@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
-import { pacificToUtcIso } from "@/lib/timezone";
+import { localToUtcIso } from "@/lib/timezone";
 import { CourseAutocomplete } from "@/components/CourseAutocomplete";
 import type { CourseDetails } from "@/lib/google-places";
 import type { TeeTime } from "@/lib/types";
@@ -15,10 +15,10 @@ const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 const DIVIDER = "rgba(80,200,110,0.10)";
 
-function utcToLocalParts(isoStr: string): { date: string; time: string } {
+function utcToLocalParts(isoStr: string, tz: string): { date: string; time: string } {
   const d = new Date(isoStr);
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles",
+    timeZone: tz,
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: false,
   }).formatToParts(d);
@@ -36,6 +36,7 @@ export default function EditTeeTimePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [groupTz, setGroupTz] = useState("America/Los_Angeles");
   const [courseName, setCourseName] = useState("");
   const [coursePlaceId, setCoursePlaceId] = useState<string | null>(null);
   const [courseDetails, setCourseDetails] = useState<CourseDetails | null>(null);
@@ -57,12 +58,15 @@ export default function EditTeeTimePage() {
       });
       if (!res.ok) { router.push(`/tee-times/${id}`); return; }
 
-      const tt = await res.json() as TeeTime;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tt = await res.json() as TeeTime & { group?: { timezone?: string } };
 
       // Guard: only creator should land here (API also enforces this on PATCH)
       if (tt.created_by !== session.user.id) { router.push(`/tee-times/${id}`); return; }
 
-      const { date, time } = utcToLocalParts(tt.tee_datetime);
+      const tz = tt.group?.timezone ?? "America/Los_Angeles";
+      setGroupTz(tz);
+      const { date, time } = utcToLocalParts(tt.tee_datetime, tz);
       setCourseName(tt.course_name);
       setCoursePlaceId(tt.course_place_id ?? null);
       setTeeDate(date);
@@ -90,7 +94,7 @@ export default function EditTeeTimePage() {
         course_name: courseName,
         course_place_id: coursePlaceId ?? null,
         course_details: courseDetails ?? null,
-        tee_datetime: pacificToUtcIso(teeDate, teeTime),
+        tee_datetime: localToUtcIso(teeDate, teeTime, groupTz),
         holes,
         max_players: maxPlayers,
         notes: notes || null,
@@ -189,7 +193,7 @@ export default function EditTeeTimePage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Max players</p>
           <div className="flex gap-3">
-            {[2, 3, 4].map((n) => (
+            {[2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 type="button"

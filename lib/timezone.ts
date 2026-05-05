@@ -1,38 +1,41 @@
-const TZ = "America/Los_Angeles";
+const PACIFIC_TZ = "America/Los_Angeles";
 
 /**
- * Convert a Pacific-local date+time (e.g. from a tee time confirmation email or
- * the manual-entry form on a server-side code path) to a UTC ISO string for DB storage.
+ * Convert a local date+time in the given IANA timezone to a UTC ISO string.
  *
- * Strategy: probe 20:00 UTC on the target date (always noon-ish Pacific, safely
- * away from the 2 AM DST boundary) to read the actual UTC offset, then construct
- * the correct ISO string.
+ * Strategy: probe 20:00 UTC on the target date (midday for any US timezone,
+ * safely away from the 2 AM DST boundary) to read the actual UTC offset,
+ * including sub-hour offsets (India, Nepal, Newfoundland, etc.).
  */
-export function pacificToUtcIso(dateStr: string, timeStr: string): string {
+export function localToUtcIso(dateStr: string, timeStr: string, tz: string): string {
   const probe = new Date(`${dateStr}T20:00:00Z`);
-  const pacificHourAtProbe = parseInt(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: TZ,
-      hour: "2-digit",
-      hour12: false,
-    }).format(probe),
-    10
-  );
-  // pacificHourAtProbe = 13 for PDT (UTC-7), 12 for PST (UTC-8)
-  const utcOffsetHours = pacificHourAtProbe - 20;
-  const sign = utcOffsetHours < 0 ? "-" : "+";
-  const absHours = String(Math.abs(utcOffsetHours)).padStart(2, "0");
-  return new Date(`${dateStr}T${timeStr}:00${sign}${absHours}:00`).toISOString();
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(probe);
+  const get = (t: string) => parseInt(parts.find((p) => p.type === t)!.value, 10);
+  const localHour = get("hour");
+  const localMinute = get("minute");
+  // UTC offset in minutes = (local time at probe) - (20:00 UTC)
+  const offsetMinutes = (localHour * 60 + localMinute) - (20 * 60);
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absOffset = Math.abs(offsetMinutes);
+  const oh = String(Math.floor(absOffset / 60)).padStart(2, "0");
+  const om = String(absOffset % 60).padStart(2, "0");
+  return new Date(`${dateStr}T${timeStr}:00${sign}${oh}:${om}`).toISOString();
 }
 
 /**
- * Format a UTC ISO string as a Pacific local datetime string for use in .ics files.
- * Returns the compact ICS format: "YYYYMMDDTHHMMSS"
+ * Format a UTC ISO string as a local datetime string in the given IANA timezone
+ * for use in .ics calendar files. Returns compact ICS format: "YYYYMMDDTHHMMSS"
  */
-export function utcIsoToPacificIcsLocal(isoStr: string): string {
+export function utcIsoToLocalIcsFormat(isoStr: string, tz: string): string {
   const d = new Date(isoStr);
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -43,4 +46,13 @@ export function utcIsoToPacificIcsLocal(isoStr: string): string {
   }).formatToParts(d);
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
   return `${get("year")}${get("month")}${get("day")}T${get("hour")}${get("minute")}${get("second")}`;
+}
+
+// Backward-compatible Pacific wrappers — existing call sites unchanged
+export function pacificToUtcIso(dateStr: string, timeStr: string): string {
+  return localToUtcIso(dateStr, timeStr, PACIFIC_TZ);
+}
+
+export function utcIsoToPacificIcsLocal(isoStr: string): string {
+  return utcIsoToLocalIcsFormat(isoStr, PACIFIC_TZ);
 }

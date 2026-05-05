@@ -11,36 +11,45 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient();
 
-  const { data: existing } = await svc
-    .from("group_members")
-    .select("group_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (existing) {
-    return NextResponse.json({ error: "You are already in a group" }, { status: 400 });
-  }
-
   const { data: group } = await svc
     .from("groups")
-    .select("id")
+    .select("id, org_id")
     .eq("id", groupId)
     .single();
 
   if (!group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
 
-  // Ensure profile exists before inserting group_member (FK requirement)
+  // Ensure profile exists
   await svc.from("profiles").upsert({
     id: user.id,
     email: user.email ?? "",
     display_name: (user.email ?? "").split("@")[0],
   }, { onConflict: "id", ignoreDuplicates: true });
 
+  // Join the group — DB unique constraint handles already-a-member gracefully
   const { error } = await svc
     .from("group_members")
     .insert({ group_id: groupId, user_id: user.id, role: "member" });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error && !error.message.includes("duplicate")) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  return NextResponse.json({ ok: true });
+  // If the group belongs to an org, also join the org as a member
+  if (group.org_id) {
+    await svc.from("org_members").upsert({
+      org_id: group.org_id,
+      user_id: user.id,
+      role: "member",
+    }, { onConflict: "org_id,user_id", ignoreDuplicates: true });
+  }
+
+  // Set as active group if user has none
+  await svc
+    .from("profiles")
+    .update({ active_group_id: groupId })
+    .eq("id", user.id)
+    .is("active_group_id", null);
+
+  return NextResponse.json({ ok: true, group_id: groupId });
 }

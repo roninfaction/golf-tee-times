@@ -35,6 +35,30 @@ async function fetchPhotoUri(photoName: string): Promise<string | null> {
 export async function autocompleteCourse(input: string): Promise<PlaceSuggestion[]> {
   if (!input || input.length < 2) return [];
 
+  // Try searchText first — returns more local results via server IP geo
+  try {
+    const stRes = await fetch(`${BASE}/places:searchText`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": API_KEY,
+        "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress",
+      },
+      body: JSON.stringify({
+        textQuery: `${input} golf course`,
+        includedType: "golf_course",
+        maxResultCount: 10,
+      }),
+    });
+    const stBody = await stRes.json() as { places?: Array<{ id?: string; displayName?: { text?: string }; formattedAddress?: string }> };
+    if (stRes.ok && stBody.places && stBody.places.length > 0) {
+      return stBody.places
+        .map((p) => (!p.id || !p.displayName?.text ? null : { placeId: p.id, name: p.displayName.text, address: p.formattedAddress ?? "" }))
+        .filter((s): s is PlaceSuggestion => !!s);
+    }
+  } catch { /* fall through to autocomplete */ }
+
+  // Fallback: autocomplete (max 5, global bias)
   const res = await fetch(`${BASE}/places:autocomplete`, {
     method: "POST",
     headers: {

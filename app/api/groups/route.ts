@@ -1,90 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getUserFromBearer } from "@/lib/auth-bearer";
 
-export async function POST(request: NextRequest) {
-  const token = request.headers.get("Authorization")?.replace("Bearer ", "");
-  if (!token) return NextResponse.json({ step: "auth", error: "No token" }, { status: 401 });
+// GET /api/groups — all groups the authenticated user belongs to
+export async function GET(request: NextRequest) {
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const svc = createServiceClient();
-  const { data: { user }, error: authError } = await svc.auth.getUser(token);
-  if (authError || !user) return NextResponse.json({ step: "auth", error: authError?.message ?? "No user" }, { status: 401 });
-
-  const { name } = await request.json();
-  if (!name?.trim()) return NextResponse.json({ step: "validation", error: "name required" }, { status: 400 });
-
-  // Check if user is already in a group
-  const { data: existing } = await svc
+  const { data, error } = await svc
     .from("group_members")
-    .select("group_id")
+    .select("role, group:groups(id, name, invite_code, timezone, photo_url, max_members, default_tee_interval, org_id)")
     .eq("user_id", user.id)
-    .maybeSingle();
+    .order("joined_at", { ascending: true });
 
-  if (existing) {
-    return NextResponse.json({ step: "already_member", error: "You are already in a group", group_id: existing.group_id }, { status: 400 });
-  }
-
-  // Ensure profile exists (required for group_members FK)
-  const { data: existingProfile, error: profileSelectError } = await svc
-    .from("profiles")
-    .select("id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!existingProfile) {
-    const { error: profileInsertError } = await svc.from("profiles").insert({
-      id: user.id,
-      email: user.email ?? "",
-      display_name: (user.email ?? "").split("@")[0],
-    });
-    if (profileInsertError) {
-      return NextResponse.json({ step: "profile_insert", error: profileInsertError.message }, { status: 500 });
-    }
-  }
-
-  // Create the group
-  const { data: group, error: groupError } = await svc
-    .from("groups")
-    .insert({ name: name.trim() })
-    .select()
-    .single();
-
-  if (groupError) return NextResponse.json({ step: "group_insert", error: groupError.message }, { status: 500 });
-
-  // Add creator as admin
-  const { error: memberError } = await svc
-    .from("group_members")
-    .insert({ group_id: group.id, user_id: user.id, role: "admin" });
-
-  if (memberError) return NextResponse.json({ step: "member_insert", error: memberError.message, group_id: group.id, user_id: user.id }, { status: 500 });
-
-  return NextResponse.json({ step: "done", ...group }, { status: 201 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
 }
 
-export async function PATCH(request: NextRequest) {
+// POST /api/groups — create a new group (users can now belong to many groups)
+export async function POST(request: NextRequest) {
   const token = request.headers.get("Authorization")?.replace("Bearer ", "");
   if (!token) return NextResponse.json({ error: "No token" }, { status: 401 });
 
   const svc = createServiceClient();
   const { data: { user }, error: authError } = await svc.auth.getUser(token);
-  if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (authError || !user) return NextResponse.json({ error: authError?.message ?? "No user" }, { status: 401 });
 
-  const { photo_url } = await request.json();
-  if (!photo_url) return NextResponse.json({ error: "photo_url required" }, { status: 400 });
+  const { name, org_id } = await request.json();
+  if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-  const { data: membership } = await svc
-    .from("group_members")
-    .select("group_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  // Ensure profile exists (required for group_members FK)
+  await svc.from("profiles").upsert({
+    id: user.id,
+    email: user.email ?? "",
+    display_name: (user.email ?? "").split("@")[0],
+  }, { onConflict: "id", ignoreDuplicates: true });
 
-  if (!membership) return NextResponse.json({ error: "Not in a group" }, { status: 403 });
-
-  const { error } = await svc
+  const { data: group, error: groupError } = await svc
     .from("groups")
-    .update({ photo_url })
-    .eq("id", membership.group_id);
+    .insert({ name: name.trim(), org_id: org_id ?? null })
+    .select()
+    .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (groupError) return NextResponse.json({ error: groupError.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  const { error: memberError } = await svc
+    .from("group_members")
+    .insert({ group_id: group.id, user_id: user.id, role: "admin" });
+
+  if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 });
+
+  // Set as active group if user has no active group yet
+  await svc
+    .from("profiles")
+    .update({ active_group_id: group.id })
+    .eq("id", user.id)
+    .is("active_group_id", null);
+
+  return NextResponse.json(group, { status: 201 });
 }

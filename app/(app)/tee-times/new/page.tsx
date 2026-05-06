@@ -20,26 +20,34 @@ export default function NewTeeTimePage() {
   const [error, setError] = useState("");
   const [groupTz, setGroupTz] = useState("America/Los_Angeles");
   const [defaultInterval, setDefaultInterval] = useState(10);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   // After first creation: id of the created tee time + list of linked ones
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [addingLinked, setAddingLinked] = useState(false);
 
   useEffect(() => {
+    const cookieMatch = document.cookie.match(/golfpack_active_group=([^;]+)/);
+    const cookieGroupId = cookieMatch ? cookieMatch[1] : null;
+    setActiveGroupId(cookieGroupId);
+
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) return;
-      supabase
+      let q = supabase
         .from("group_members")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("group:groups(timezone,default_tee_interval)")
-        .eq("user_id", session.user.id)
-        .maybeSingle()
-        .then(({ data }) => {
+        .select("group_id, group:groups(timezone,default_tee_interval)")
+        .eq("user_id", session.user.id);
+      if (cookieGroupId) q = (q as typeof q).eq("group_id", cookieGroupId);
+      else q = (q as typeof q).order("joined_at", { ascending: true });
+      q.maybeSingle().then(({ data }) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const g = (data as any)?.group;
           if (g?.timezone) setGroupTz(g.timezone);
           if (g?.default_tee_interval) setDefaultInterval(g.default_tee_interval);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (!cookieGroupId && (data as any)?.group_id) setActiveGroupId((data as any).group_id);
         });
     });
   }, []);
@@ -71,6 +79,7 @@ export default function NewTeeTimePage() {
         confirmation_number: confirmationNumber || null,
         parent_tee_time_id: parentId,
         slot_order: slotOrder,
+        group_id: activeGroupId,
       }),
     });
   }

@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { unstable_cache } from "next/cache";
 import { formatTeeTime } from "@/lib/format";
 import { clsx } from "clsx";
 import type { TeeTime, Rsvp, GuestInvite } from "@/lib/types";
@@ -70,7 +71,11 @@ export default async function UpcomingPage() {
     membershipQuery = membershipQuery.order("joined_at", { ascending: true });
   }
 
-  const { data: membership } = await membershipQuery.maybeSingle();
+  // Run membership lookup and RSVP fetch in parallel — both only need user.id.
+  const [{ data: membership }, { data: myRsvpRows }] = await Promise.all([
+    membershipQuery.maybeSingle(),
+    svc.from("rsvps").select("tee_time_id").eq("user_id", user.id),
+  ]);
 
   const groupId = membership?.group_id;
 
@@ -95,30 +100,32 @@ export default async function UpcomingPage() {
   const in60 = new Date(today);
   in60.setDate(today.getDate() + 60);
 
-  // Fetch tee time IDs the user has been invited to (has an RSVP row).
-  const { data: myRsvpRows } = await svc
-    .from("rsvps")
-    .select("tee_time_id")
-    .eq("user_id", user.id);
-
   const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
 
-  let teeTimesQuery = svc
-    .from("tee_times")
-    .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
-    .eq("group_id", groupId)
-    .gte("tee_datetime", today.toISOString())
-    .lte("tee_datetime", in60.toISOString())
-    .order("tee_datetime", { ascending: true })
-    .limit(50);
+  const fetchTeeTimes = unstable_cache(
+    async (gId: string, uId: string, ids: string[], from: string, to: string) => {
+      const svcInner = createServiceClient();
+      let q = svcInner
+        .from("tee_times")
+        .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
+        .eq("group_id", gId)
+        .gte("tee_datetime", from)
+        .lte("tee_datetime", to)
+        .order("tee_datetime", { ascending: true })
+        .limit(50);
+      if (ids.length > 0) {
+        q = q.or(`created_by.eq.${uId},id.in.(${ids.join(",")})`);
+      } else {
+        q = q.eq("created_by", uId);
+      }
+      const { data } = await q;
+      return data ?? [];
+    },
+    ["upcoming-tee-times"],
+    { revalidate: 30, tags: [`tee-times-${groupId}`] }
+  );
 
-  if (invitedIds.length > 0) {
-    teeTimesQuery = teeTimesQuery.or(`created_by.eq.${user.id},id.in.(${invitedIds.join(",")})`);
-  } else {
-    teeTimesQuery = teeTimesQuery.eq("created_by", user.id);
-  }
-
-  const { data: teeTimes } = await teeTimesQuery;
+  const teeTimes = await fetchTeeTimes(groupId, user.id, invitedIds, today.toISOString(), in60.toISOString());
 
   const rows = (teeTimes ?? []).map((tt: TeeTime & { rsvps: Rsvp[]; guest_invites: GuestInvite[] }) => {
     const myRsvp = tt.rsvps.find((r: Rsvp) => r.user_id === user.id) ?? null;

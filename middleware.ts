@@ -26,10 +26,12 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // getSession() reads the JWT from the cookie (no network round-trip).
+  // Pages that serve user data call getUser() themselves for secure validation.
   let user = null;
   try {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
+    const { data } = await supabase.auth.getSession();
+    user = data.session?.user ?? null;
   } catch {
     // Auth check failed — treat as unauthenticated
   }

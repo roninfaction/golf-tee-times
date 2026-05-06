@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 
@@ -28,7 +29,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const svc = createServiceClient();
 
   // Only the creator can edit
-  const { data: existing } = await svc.from("tee_times").select("created_by").eq("id", id).single();
+  const { data: existing } = await svc.from("tee_times").select("created_by, group_id").eq("id", id).single();
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -67,6 +68,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidateTag(`tee-times-${existing.group_id}`, "default");
   return NextResponse.json(data);
 }
 
@@ -78,11 +80,12 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const svc = createServiceClient();
 
   // Only the creator can delete
-  const { data: existing } = await svc.from("tee_times").select("created_by").eq("id", id).single();
+  const { data: existing } = await svc.from("tee_times").select("created_by, group_id").eq("id", id).single();
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { error } = await svc.from("tee_times").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  revalidateTag(`tee-times-${existing.group_id}`, "default");
   return NextResponse.json({ ok: true });
 }

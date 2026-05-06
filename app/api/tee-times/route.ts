@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 
@@ -121,6 +122,8 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  revalidateTag(`tee-times-${resolvedGroupId}`, "default");
 
   // Only create an RSVP for the creator. Group members are invited explicitly via
   // POST /api/tee-times/[id]/invite-group, which makes the tee time visible to them.

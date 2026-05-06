@@ -4,7 +4,15 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 
-export function DeleteTeeTimeButton({ teeTimeId }: { teeTimeId: string }) {
+export function DeleteTeeTimeButton({
+  teeTimeId,
+  redirectTo = "/upcoming",
+  compact = false,
+}: {
+  teeTimeId: string;
+  redirectTo?: string;
+  compact?: boolean;
+}) {
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +24,32 @@ export function DeleteTeeTimeButton({ teeTimeId }: { teeTimeId: string }) {
       method: "DELETE",
       headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
     });
-    window.location.href = "/upcoming";
+    window.location.href = redirectTo;
+  }
+
+  if (compact) {
+    if (confirming) {
+      return (
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleDelete}
+            disabled={loading}
+            className="text-xs font-semibold"
+            style={{ color: "#FF453A", opacity: loading ? 0.5 : 1 }}
+          >
+            {loading ? "…" : "Delete"}
+          </button>
+          <button onClick={() => setConfirming(false)} className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+            Cancel
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button onClick={() => setConfirming(true)} className="shrink-0 p-1" style={{ color: "rgba(255,69,58,0.5)" }}>
+        <Trash2 size={14} />
+      </button>
+    );
   }
 
   if (confirming) {

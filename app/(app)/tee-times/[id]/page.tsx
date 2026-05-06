@@ -5,7 +5,7 @@ import { RsvpButtons } from "@/components/RsvpButtons";
 import { InviteGuestButton } from "@/components/InviteGuestButton";
 import { InviteGroupButton } from "@/components/InviteGroupButton";
 import { DeleteTeeTimeButton } from "@/components/DeleteTeeTimeButton";
-import { ChevronLeft, Clock, Flag, Users, Hash, FileText, Phone, Globe, MapPin, Link2 } from "lucide-react";
+import { ChevronLeft, Flag, Hash, FileText, Phone, Globe, MapPin, Link2 } from "lucide-react";
 import Link from "next/link";
 import type { TeeTime, Rsvp, GuestInvite, Profile, Course } from "@/lib/types";
 import { ScoreSection } from "@/components/ScoreSection";
@@ -168,17 +168,11 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
         {/* Details card */}
         <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-          <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-            <Clock size={15} style={{ color: GOLD, flexShrink: 0 }} />
-            <span className="text-sm text-white">{formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}</span>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-            <Flag size={15} style={{ color: GOLD, flexShrink: 0 }} />
-            <span className="text-sm text-white">{teeTime.holes} holes</span>
-          </div>
           <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: (teeTime.confirmation_number || teeTime.notes) ? `0.5px solid ${DIVIDER}` : "none" }}>
-            <Users size={15} style={{ color: GOLD, flexShrink: 0 }} />
+            <Flag size={15} style={{ color: GOLD, flexShrink: 0 }} />
             <span className="text-sm text-white">
+              {teeTime.holes} holes
+              <span style={{ color: "rgba(255,255,255,0.3)" }}> · </span>
               {totalAccepted} of {teeTime.max_players} confirmed
               {openSpots > 0 && <span style={{ color: "rgba(255,255,255,0.35)" }}> · {openSpots} spot{openSpots !== 1 ? "s" : ""} open</span>}
             </span>
@@ -363,17 +357,28 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
                   + lt.guest_invites.filter(g => g.status === "accepted").length;
                 const isLast = i === linkedTimes.length - 1;
                 return (
-                  <Link
+                  <div
                     key={lt.id}
-                    href={`/tee-times/${lt.id}`}
-                    className="flex items-center justify-between px-4 py-3.5 transition-opacity active:opacity-70"
+                    className="flex items-center gap-2 px-4 py-3.5"
                     style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}
                   >
-                    <span className="text-sm text-white">{formatTeeTime(lt.tee_datetime)}</span>
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
-                      {accepted}/{lt.max_players} confirmed
-                    </span>
-                  </Link>
+                    <Link
+                      href={`/tee-times/${lt.id}`}
+                      className="flex-1 flex items-center justify-between transition-opacity active:opacity-70"
+                    >
+                      <span className="text-sm text-white">{formatTeeTime(lt.tee_datetime)}</span>
+                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                        {accepted}/{lt.max_players} confirmed
+                      </span>
+                    </Link>
+                    {teeTime.created_by === user.id && (
+                      <DeleteTeeTimeButton
+                        teeTimeId={lt.id}
+                        redirectTo={`/tee-times/${teeTime.id}`}
+                        compact
+                      />
+                    )}
+                  </div>
                 );
               })}
             </div>

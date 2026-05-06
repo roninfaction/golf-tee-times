@@ -172,6 +172,16 @@ export function TeamPlaySection({
                         className="flex-1 bg-transparent text-sm text-white outline-none"
                         placeholder={`Team ${String.fromCharCode(65 + i)}`}
                       />
+                      {teamNames.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setTeamNames(prev => prev.filter((_, idx) => idx !== i))}
+                          className="shrink-0 text-base leading-none px-1"
+                          style={{ color: "rgba(255,255,255,0.3)" }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   ))}
                   {teamNames.length < 4 && (

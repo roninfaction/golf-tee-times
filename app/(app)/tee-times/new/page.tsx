@@ -3,8 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
+
+function getTomorrowStr() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const DEFAULT_DATE = getTomorrowStr();
 import { localToUtcIso } from "@/lib/timezone";
 import { CourseAutocomplete } from "@/components/CourseAutocomplete";
 import type { CourseDetails } from "@/lib/google-places";
@@ -25,6 +31,7 @@ export default function NewTeeTimePage() {
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [linkedIds, setLinkedIds] = useState<string[]>([]);
   const [addingLinked, setAddingLinked] = useState(false);
+  const [selectedInterval, setSelectedInterval] = useState<number | null>(null);
 
   useEffect(() => {
     const cookieMatch = document.cookie.match(/golfpack_active_group=([^;]+)/);
@@ -55,7 +62,7 @@ export default function NewTeeTimePage() {
   const [courseName, setCourseName] = useState("");
   const [coursePlaceId, setCoursePlaceId] = useState<string | null>(null);
   const [courseDetails, setCourseDetails] = useState<CourseDetails | null>(null);
-  const [teeDate, setTeeDate] = useState("");
+  const [teeDate, setTeeDate] = useState(DEFAULT_DATE);
   const [teeTime, setTeeTime] = useState("08:00");
   const [holes, setHoles] = useState<9 | 18>(18);
   const [maxPlayers, setMaxPlayers] = useState(4);
@@ -115,24 +122,22 @@ export default function NewTeeTimePage() {
     }
   }
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = [
-    tomorrow.getFullYear(),
-    String(tomorrow.getMonth() + 1).padStart(2, "0"),
-    String(tomorrow.getDate()).padStart(2, "0"),
-  ].join("-");
-
   const fieldStyle = "w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20";
+  const activeInterval = selectedInterval ?? defaultInterval;
 
   return (
     <div className="min-h-screen pb-52">
       {/* Header */}
       <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
-        <Link href="/upcoming" style={{ color: "#30D158" }} className="flex items-center gap-0.5 text-sm font-medium">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          style={{ color: "#30D158" }}
+          className="flex items-center gap-0.5 text-sm font-medium"
+        >
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel
-        </Link>
+        </button>
         <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Tee Time</h1>
       </div>
 
@@ -159,7 +164,7 @@ export default function NewTeeTimePage() {
               type="date"
               value={teeDate}
               onChange={(e) => setTeeDate(e.target.value)}
-              min={minDate}
+              min={DEFAULT_DATE}
               required
               className={fieldStyle}
               style={{ borderBottom: `0.5px solid ${DIVIDER}`, colorScheme: "dark" }}
@@ -284,12 +289,12 @@ export default function NewTeeTimePage() {
                       key={n}
                       type="button"
                       disabled={addingLinked}
-                      onClick={() => addLinkedSlot(n)}
-                      className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                      onClick={() => { setSelectedInterval(n); addLinkedSlot(n); }}
+                      className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
                       style={{
-                        background: defaultInterval === n ? "rgba(201,168,76,0.15)" : CARD_BG,
-                        border: `0.5px solid ${defaultInterval === n ? "rgba(201,168,76,0.4)" : CARD_BORDER}`,
-                        color: "rgba(255,255,255,0.7)",
+                        background: activeInterval === n ? "rgba(201,168,76,0.22)" : CARD_BG,
+                        border: `0.5px solid ${activeInterval === n ? GOLD : CARD_BORDER}`,
+                        color: activeInterval === n ? GOLD : "rgba(255,255,255,0.55)",
                       }}
                     >
                       +{n}m

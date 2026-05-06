@@ -8,15 +8,6 @@ const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
 const DIVIDER = "rgba(80,200,110,0.10)";
 
-async function getStats(token: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/admin/stats`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-
 export default async function AdminDashboard() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -31,9 +22,31 @@ export default async function AdminDashboard() {
 
   if (!profile?.is_super_admin) redirect("/upcoming");
 
-  // Fetch stats via the API so we reuse the guard logic
-  const { data: { session } } = await supabase.auth.getSession();
-  const stats = await getStats(session?.access_token ?? "");
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const [
+    { count: totalUsers },
+    { count: totalOrgs },
+    { count: totalGroups },
+    { count: totalTeeTimes },
+    { count: recentUsers },
+    { count: recentTeeTimes },
+  ] = await Promise.all([
+    svc.from("profiles").select("id", { count: "exact", head: true }),
+    svc.from("organizations").select("id", { count: "exact", head: true }),
+    svc.from("groups").select("id", { count: "exact", head: true }),
+    svc.from("tee_times").select("id", { count: "exact", head: true }),
+    svc.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
+    svc.from("tee_times").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
+  ]);
+  const stats = {
+    total_users: totalUsers ?? 0,
+    total_orgs: totalOrgs ?? 0,
+    total_groups: totalGroups ?? 0,
+    total_tee_times: totalTeeTimes ?? 0,
+    recent_users_30d: recentUsers ?? 0,
+    recent_tee_times_30d: recentTeeTimes ?? 0,
+  };
 
   const statCards = [
     { label: "Total users", value: stats?.total_users ?? "—", icon: Users, sub: `+${stats?.recent_users_30d ?? 0} this month` },

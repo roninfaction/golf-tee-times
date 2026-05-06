@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Plus, Users, Building2 } from "lucide-react";
+import { Plus, Users, Building2, ChevronLeft } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -30,6 +30,10 @@ export default async function GroupsPage() {
   return (
     <div className="min-h-screen pb-52">
       <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+        <Link href="/group" className="inline-flex items-center gap-0.5 text-sm font-medium mb-3" style={{ color: "#30D158" }}>
+          <ChevronLeft size={18} strokeWidth={2} />
+          Back
+        </Link>
         <h1 className="text-[28px] font-bold text-white tracking-tight">Your Groups</h1>
         <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
           {groups.length} group{groups.length !== 1 ? "s" : ""}

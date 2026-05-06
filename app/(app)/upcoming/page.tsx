@@ -3,51 +3,12 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { unstable_cache } from "next/cache";
-import { formatTeeTime } from "@/lib/format";
-import { clsx } from "clsx";
 import type { TeeTime, Rsvp, GuestInvite } from "@/lib/types";
 import { Plus } from "lucide-react";
 import { GroupSwitcher } from "@/components/GroupSwitcher";
+import { ScheduleView } from "@/components/ScheduleView";
+import type { ScheduleRow } from "@/components/ScheduleView";
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const GOLD = "#C9A84C";
-const CARD_BG = "rgba(255,255,255,0.055)";
-const CARD_BORDER = "rgba(80,200,110,0.16)";
-
-function getLocalDateStr(d: Date, tz: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(d);
-  const get = (type: string) => parts.find((p) => p.type === type)!.value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function getWeekDayStrs(referenceDate: Date, tz: string): string[] {
-  const todayStr = getLocalDateStr(referenceDate, tz);
-  const dayOfWeek = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(referenceDate);
-  const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(dayOfWeek);
-  const diff = dayIdx === 0 ? -6 : 1 - dayIdx;
-  return Array.from({ length: 7 }, (_, i) => {
-    const base = new Date(todayStr + "T12:00:00Z");
-    base.setUTCDate(base.getUTCDate() + diff + i);
-    return getLocalDateStr(base, tz);
-  });
-}
-
-function daysUntil(isoString: string, tz: string): string {
-  const d = new Date(isoString);
-  const now = new Date();
-  const todayStr = getLocalDateStr(now, tz);
-  const teeStr = getLocalDateStr(d, tz);
-  const diff = Math.round(
-    (new Date(teeStr).getTime() - new Date(todayStr).getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  if (diff < 7) return `In ${diff} days`;
-  return d.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric" });
-}
 
 export default async function UpcomingPage() {
   const supabase = await createClient();
@@ -127,18 +88,24 @@ export default async function UpcomingPage() {
 
   const teeTimes = await fetchTeeTimes(groupId, user.id, invitedIds, today.toISOString(), in60.toISOString());
 
-  const rows = (teeTimes ?? []).map((tt: TeeTime & { rsvps: Rsvp[]; guest_invites: GuestInvite[] }) => {
+  const groupTz = (membership?.group as unknown as { timezone?: string })?.timezone ?? "America/Los_Angeles";
+
+  const scheduleRows: ScheduleRow[] = (teeTimes ?? []).map((tt: TeeTime & { rsvps: Rsvp[]; guest_invites: GuestInvite[] }) => {
     const myRsvp = tt.rsvps.find((r: Rsvp) => r.user_id === user.id) ?? null;
     const acceptedCount = tt.rsvps.filter((r: Rsvp) => r.status === "accepted").length;
     const guestAcceptedCount = tt.guest_invites.filter((g: GuestInvite) => g.status === "accepted").length;
-    return { ...tt, my_rsvp: myRsvp, accepted_count: acceptedCount + guestAcceptedCount };
-  });
-
-  const groupTz = (membership?.group as unknown as { timezone?: string })?.timezone ?? "America/Los_Angeles";
-  const weekDayStrs = getWeekDayStrs(today, groupTz);
-  const todayLocalStr = getLocalDateStr(today, groupTz);
-  const monthLabel = new Date(weekDayStrs[0] + "T12:00:00Z").toLocaleDateString("en-US", {
-    timeZone: groupTz, month: "long", year: "numeric",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const coursePhoto = (tt as any).course?.photo_uri as string | null ?? null;
+    return {
+      id: tt.id,
+      course_name: tt.course_name,
+      tee_datetime: tt.tee_datetime,
+      holes: tt.holes,
+      max_players: tt.max_players,
+      accepted_count: acceptedCount + guestAcceptedCount,
+      my_rsvp: myRsvp ? { status: myRsvp.status } : null,
+      course_photo: coursePhoto,
+    };
   });
 
   return (
@@ -161,97 +128,7 @@ export default async function UpcomingPage() {
         </Link>
       </div>
 
-      {/* Week strip */}
-      <div className="rounded-2xl p-4 mb-6" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-        <p className="text-xs font-semibold mb-3 px-0.5 uppercase tracking-wide" style={{ color: GOLD }}>{monthLabel}</p>
-        <div className="grid grid-cols-7 gap-1">
-          {weekDayStrs.map((dayStr, i) => {
-            const isToday = dayStr === todayLocalStr;
-            const dayNum = parseInt(dayStr.slice(8), 10);
-            const dayTimes = rows.filter(tt => getLocalDateStr(new Date(tt.tee_datetime), groupTz) === dayStr);
-            return (
-              <div key={i} className="flex flex-col items-center gap-1.5">
-                <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>{DAY_LABELS[i]}</span>
-                <div className={clsx(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-semibold",
-                )} style={{
-                  background: isToday ? "#30D158" : "transparent",
-                  color: isToday ? "#000" : "rgba(255,255,255,0.8)",
-                }}>
-                  {dayNum}
-                </div>
-                <div className="flex gap-0.5 justify-center min-h-[5px]">
-                  {dayTimes.map((tt) => {
-                    const s = tt.my_rsvp?.status ?? "pending";
-                    const dotColor = s === "accepted" ? "#30D158" : s === "declined" ? "#FF453A" : GOLD;
-                    return <div key={tt.id} className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />;
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tee time list */}
-      {rows.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="font-medium text-white mb-1">No upcoming tee times</p>
-          <p className="text-sm mb-7" style={{ color: "rgba(255,255,255,0.4)" }}>Add one manually or forward a confirmation email</p>
-          <Link href="/tee-times/new" className="font-semibold px-5 py-2.5 rounded-xl text-sm text-black" style={{ background: "#30D158" }}>
-            Add tee time
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((tt) => {
-            const myStatus = tt.my_rsvp?.status ?? "pending";
-            const badgeStyle = myStatus === "accepted"
-              ? { background: "rgba(48,209,88,0.15)", color: "#30D158" }
-              : myStatus === "declined"
-              ? { background: "rgba(255,69,58,0.12)", color: "#FF453A" }
-              : { background: "rgba(201,168,76,0.15)", color: GOLD };
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const photoUri = (tt as any).course?.photo_uri as string | null | undefined;
-
-            return (
-              <Link
-                key={tt.id}
-                href={`/tee-times/${tt.id}`}
-                className="block rounded-2xl overflow-hidden transition-opacity active:opacity-70"
-                style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}
-              >
-                {photoUri && (
-                  <div className="relative h-28 w-full">
-                    <img src={photoUri} alt={tt.course_name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.65))" }} />
-                    <p className="absolute bottom-2.5 left-4 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.7)" }}>
-                      {daysUntil(tt.tee_datetime, groupTz)}
-                    </p>
-                  </div>
-                )}
-                <div className="flex items-start justify-between gap-3 p-4">
-                  <div className="flex-1 min-w-0">
-                    {!photoUri && (
-                      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: GOLD }}>
-                        {daysUntil(tt.tee_datetime, groupTz)}
-                      </p>
-                    )}
-                    <p className="font-semibold text-white text-[16px] truncate tracking-tight">{tt.course_name}</p>
-                    <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>
-                      {formatTeeTime(tt.tee_datetime)} &middot; {tt.holes}H &middot; {tt.accepted_count}/{tt.max_players} going
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 mt-0.5" style={badgeStyle}>
-                    {myStatus === "accepted" ? "Going" : myStatus === "declined" ? "Can't go" : "Pending"}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <ScheduleView rows={scheduleRows} groupTz={groupTz} />
     </div>
   );
 }

@@ -75,7 +75,7 @@ export function InviteGroupButton({ teeTimeId }: Props) {
             </p>
             {state === "idle" && (
               <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                Notifies your group and lets them RSVP
+                Sends this tee time to all group members to RSVP
               </p>
             )}
           </div>

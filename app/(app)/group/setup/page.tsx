@@ -48,7 +48,7 @@ export default function GroupSetupPage() {
 
       <div className="px-4 pt-8">
         <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.45)" }}>
-          Give your golf crew a name. You'll be the admin and can invite others with a shareable link.
+          Give your golf crew a name. You&apos;ll be the admin and can invite others with a shareable link.
         </p>
 
         <form onSubmit={createGroup} className="space-y-4">

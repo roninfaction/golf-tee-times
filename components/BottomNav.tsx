@@ -18,6 +18,7 @@ export function BottomNav() {
 
   // Clear pending indicator once navigation completes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPendingHref(null);
   }, [pathname]);
 

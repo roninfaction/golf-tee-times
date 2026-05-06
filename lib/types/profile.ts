@@ -7,4 +7,5 @@ export type Profile = {
   avatar_url: string | null;
   active_group_id: string | null;
   forwarding_group_id: string | null;
+  ghin_handicap_index?: number | null;
 };

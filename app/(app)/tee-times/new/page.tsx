@@ -36,6 +36,7 @@ export default function NewTeeTimePage() {
   useEffect(() => {
     const cookieMatch = document.cookie.match(/golfpack_active_group=([^;]+)/);
     const cookieGroupId = cookieMatch ? cookieMatch[1] : null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveGroupId(cookieGroupId);
 
     const supabase = createClient();

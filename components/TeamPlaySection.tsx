@@ -63,6 +63,7 @@ export function TeamPlaySection({
     // Load existing assignments from rsvps
     const init: Record<string, string | null> = {};
     for (const r of rsvps) init[r.id] = r.team_id ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAssignments(init);
   }, [expanded, teeTimeId, token, rsvps]);
 

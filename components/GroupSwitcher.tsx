@@ -36,6 +36,7 @@ export function GroupSwitcher({ activeGroupId, groupName }: { activeGroupId: str
   }, [open, groups.length]);
 
   function switchGroup(groupId: string) {
+    // eslint-disable-next-line react-hooks/immutability
     document.cookie = `golfpack_active_group=${groupId}; path=/; max-age=31536000; SameSite=Lax`;
     setOpen(false);
     startTransition(() => router.push(`/group/${groupId}`));

@@ -27,6 +27,14 @@ export default function AdminUsersPage() {
   const [token, setToken] = useState("");
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  const fetchUsers = useCallback(async (tok: string, q: string) => {
+    setLoading(true);
+    const url = `/api/admin/users?limit=50${q ? `&search=${encodeURIComponent(q)}` : ""}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${tok}` } });
+    if (res.ok) setUsers(await res.json());
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -40,15 +48,7 @@ export default function AdminUsersPage() {
 
       fetchUsers(session.access_token, "");
     });
-  }, [router]);
-
-  const fetchUsers = useCallback(async (tok: string, q: string) => {
-    setLoading(true);
-    const url = `/api/admin/users?limit=50${q ? `&search=${encodeURIComponent(q)}` : ""}`;
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${tok}` } });
-    if (res.ok) setUsers(await res.json());
-    setLoading(false);
-  }, []);
+  }, [router, fetchUsers]);
 
   useEffect(() => {
     if (!token) return;

@@ -18,6 +18,7 @@ export function InstallPrompt() {
   useEffect(() => {
     const dismissed = localStorage.getItem("install_prompt_dismissed");
     if (!dismissed && isIosSafariNotInstalled()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShow(true);
     }
   }, []);

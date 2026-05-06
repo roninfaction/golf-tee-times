@@ -151,9 +151,8 @@ export default async function GroupPage({ params }: Params) {
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: m.role === "admin" ? GOLD : "rgba(255,255,255,0.3)" }}>
                       {m.role === "admin" ? "Admin" : ""}
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {(m.profile as any)?.ghin_handicap_index != null
-                        ? `${m.role === "admin" ? " · " : ""}HCP ${(m.profile as any).ghin_handicap_index}`
+                      {m.profile.ghin_handicap_index != null
+                        ? `${m.role === "admin" ? " · " : ""}HCP ${m.profile.ghin_handicap_index}`
                         : ""}
                     </p>
                   </div>

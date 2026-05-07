@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
+import { useRouter } from "next/navigation";
 
 export function DeleteTeeTimeButton({
   teeTimeId,
@@ -13,6 +14,7 @@ export function DeleteTeeTimeButton({
   redirectTo?: string;
   compact?: boolean;
 }) {
+  const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -24,7 +26,11 @@ export function DeleteTeeTimeButton({
       method: "DELETE",
       headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
     });
-    window.location.href = redirectTo;
+    if (compact) {
+      router.refresh();
+    } else {
+      router.push(redirectTo);
+    }
   }
 
   if (compact) {

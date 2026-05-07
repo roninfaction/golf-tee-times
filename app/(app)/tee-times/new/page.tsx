@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 
 function getTomorrowStr() {
@@ -112,7 +112,6 @@ export default function NewTeeTimePage() {
   async function addLinkedSlot(intervalMin: number) {
     if (!createdId || linkedIds.length >= 6) return;
     setAddingLinked(true);
-    // Compute time of next slot based on the last linked slot
     const lastUtc = new Date(localToUtcIso(teeDate, teeTime, groupTz));
     lastUtc.setMinutes(lastUtc.getMinutes() + intervalMin * linkedIds.length);
     const res = await postTeeTime(createdId, lastUtc.toISOString(), linkedIds.length);
@@ -123,8 +122,17 @@ export default function NewTeeTimePage() {
     }
   }
 
+  async function removeLinkedSlot(id: string) {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    await fetch(`/api/tee-times/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+    });
+    setLinkedIds(prev => prev.filter(lid => lid !== id));
+  }
+
   const fieldStyle = "w-full px-4 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20";
-  const activeInterval = selectedInterval ?? defaultInterval;
 
   return (
     <div className="min-h-screen pb-52">
@@ -132,7 +140,7 @@ export default function NewTeeTimePage() {
       <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => router.push("/upcoming")}
           style={{ color: "#30D158" }}
           className="flex items-center gap-0.5 text-sm font-medium"
         >
@@ -267,54 +275,88 @@ export default function NewTeeTimePage() {
             </p>
           </>
         ) : (
-          <div className="space-y-4">
-            {/* Slot list */}
-            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-              {linkedIds.map((lid, i) => (
-                <div key={lid} className="flex items-center justify-between px-4 py-3" style={{ borderBottom: i < linkedIds.length - 1 ? `0.5px solid ${DIVIDER}` : "none" }}>
-                  <span className="text-sm text-white">Slot {i + 1}</span>
-                  <span className="text-xs font-semibold" style={{ color: "#30D158" }}>Added ✓</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Add another slot */}
-            {linkedIds.length < 6 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
-                  Add another tee time
-                </p>
-                <div className="flex gap-2">
-                  {[8, 10, 12, 15].map(n => (
-                    <button
-                      key={n}
-                      type="button"
-                      disabled={addingLinked}
-                      onClick={() => { setSelectedInterval(n); addLinkedSlot(n); }}
-                      className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all"
-                      style={{
-                        background: activeInterval === n ? "rgba(201,168,76,0.22)" : CARD_BG,
-                        border: `0.5px solid ${activeInterval === n ? GOLD : CARD_BORDER}`,
-                        color: activeInterval === n ? GOLD : "rgba(255,255,255,0.55)",
-                      }}
-                    >
-                      +{n}m
-                    </button>
-                  ))}
-                </div>
-                {addingLinked && <p className="text-xs mt-2 px-1" style={{ color: "rgba(255,255,255,0.35)" }}>Adding slot…</p>}
-              </div>
-            )}
-
-            {/* Done */}
+          <div className="space-y-5">
+            {/* Done — primary action */}
             <button
               type="button"
               onClick={() => router.push(`/tee-times/${createdId}`)}
               className="w-full py-4 rounded-2xl text-base font-semibold text-black"
               style={{ background: "#30D158" }}
             >
-              Done — view tee time{linkedIds.length > 1 ? "s" : ""}
+              Done — view tee time
             </button>
+
+            {/* Linked slots added so far (slot 2+) */}
+            {linkedIds.length > 1 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
+                  Linked slots
+                </p>
+                <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                  {linkedIds.slice(1).map((lid, i) => (
+                    <div
+                      key={lid}
+                      className="flex items-center justify-between px-4 py-3"
+                      style={{ borderBottom: i < linkedIds.length - 2 ? `0.5px solid ${DIVIDER}` : "none" }}
+                    >
+                      <span className="text-sm text-white">Slot {i + 2}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold" style={{ color: "#30D158" }}>Added ✓</span>
+                        <button
+                          type="button"
+                          onClick={() => removeLinkedSlot(lid)}
+                          className="p-1"
+                          style={{ color: "rgba(255,69,58,0.55)" }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add a linked tee time — secondary, optional */}
+            {linkedIds.length < 6 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: "rgba(255,255,255,0.25)" }}>
+                  Add a linked tee time — optional
+                </p>
+                <div className="flex gap-2 mb-3">
+                  {[8, 10, 12, 15].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={addingLinked}
+                      onClick={() => setSelectedInterval(n)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                      style={{
+                        background: (selectedInterval ?? defaultInterval) === n ? "rgba(201,168,76,0.22)" : CARD_BG,
+                        border: `0.5px solid ${(selectedInterval ?? defaultInterval) === n ? GOLD : CARD_BORDER}`,
+                        color: (selectedInterval ?? defaultInterval) === n ? GOLD : "rgba(255,255,255,0.45)",
+                      }}
+                    >
+                      +{n}m
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  disabled={addingLinked}
+                  onClick={() => addLinkedSlot(selectedInterval ?? defaultInterval)}
+                  className="w-full py-3.5 rounded-2xl text-sm font-semibold transition-opacity"
+                  style={{
+                    background: "rgba(201,168,76,0.12)",
+                    border: "0.5px solid rgba(201,168,76,0.22)",
+                    color: GOLD,
+                    opacity: addingLinked ? 0.6 : 1,
+                  }}
+                >
+                  {addingLinked ? "Adding…" : `Add +${selectedInterval ?? defaultInterval}m tee time`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </form>

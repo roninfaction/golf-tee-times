@@ -74,8 +74,13 @@ self.addEventListener("notificationclick", (evt) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clients) => {
       const match = clients.find((c) => c.url.includes(self.location.origin));
-      if (match) { match.focus(); match.navigate(url); }
-      else self.clients.openWindow(url);
+      if (match) {
+        // postMessage is reliable on iOS; client.navigate() is not
+        match.focus();
+        match.postMessage({ type: "SW_NAVIGATE", url });
+      } else {
+        self.clients.openWindow(url);
+      }
     })
   );
 });

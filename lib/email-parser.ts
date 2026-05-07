@@ -9,17 +9,22 @@ export type ParsedTeeTime = {
   notes: string | null;
 };
 
-// Strip HTML tags and collapse whitespace
+// Strip HTML tags while preserving newlines from block elements
 function stripHtml(html: string): string {
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(p|div|tr|li|h[1-6]|blockquote|section|article)[^>]*>/gi, "\n")
+    .replace(/<\/td>/gi, " | ")
+    .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/\s{2,}/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -28,7 +33,7 @@ export async function parseTeeTimeEmail(
   isHtml = false
 ): Promise<ParsedTeeTime | null> {
   const text = isHtml ? stripHtml(emailBody) : emailBody;
-  const truncated = text.slice(0, 3000);
+  const truncated = text.slice(0, 8000);
 
   const prompt = `You are parsing a golf course booking confirmation email to extract structured data.
 

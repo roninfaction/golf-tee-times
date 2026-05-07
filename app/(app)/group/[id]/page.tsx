@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CopyInviteButton } from "@/components/CopyInviteButton";
 import { GroupPhotoUpload } from "@/components/GroupPhotoUpload";
+import { GroupIntervalPicker } from "@/components/GroupIntervalPicker";
 import type { GroupMember, Profile } from "@/lib/types";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app";
@@ -207,28 +208,7 @@ export default async function GroupPage({ params }: Params) {
               </div>
               {/* Default tee interval */}
               <div className="px-4 py-3.5">
-                <p className="text-xs font-medium mb-2" style={{ color: "rgba(255,255,255,0.45)" }}>Default tee interval (minutes)</p>
-                <form action={async (formData: FormData) => {
-                  "use server";
-                  const { createServiceClient: sc } = await import("@/lib/supabase/server");
-                  const s = sc();
-                  await s.from("groups").update({ default_tee_interval: parseInt(formData.get("interval") as string) }).eq("id", groupId);
-                }}>
-                  <div className="flex gap-2">
-                    {[8, 10, 12, 15].map(n => (
-                      <label key={n} className="flex-1">
-                        <input type="radio" name="interval" value={n} defaultChecked={group.default_tee_interval === n} className="sr-only" />
-                        <div className="text-center py-2 rounded-xl text-sm font-semibold cursor-pointer" style={{
-                          background: group.default_tee_interval === n ? "#30D158" : "rgba(255,255,255,0.07)",
-                          color: group.default_tee_interval === n ? "#000" : "rgba(255,255,255,0.5)",
-                        }}>{n}</div>
-                      </label>
-                    ))}
-                  </div>
-                  <button type="submit" className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: "#30D158", color: "#000" }}>
-                    Save
-                  </button>
-                </form>
+                <GroupIntervalPicker groupId={group.id} defaultInterval={group.default_tee_interval ?? 10} />
               </div>
             </div>
           </div>

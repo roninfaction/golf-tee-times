@@ -66,7 +66,7 @@ export default function NewOrgPage() {
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel
         </Link>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Organization</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16 pointer-events-none">New Organization</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 pt-6 space-y-6">

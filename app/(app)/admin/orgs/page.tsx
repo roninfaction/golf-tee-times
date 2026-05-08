@@ -52,7 +52,7 @@ export default async function AdminOrgsPage({ searchParams }: SearchParams) {
           <ChevronLeft size={18} strokeWidth={2} />
           Admin
         </Link>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">Organizations</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16 pointer-events-none">Organizations</h1>
       </div>
 
       <div className="px-4 pt-5">

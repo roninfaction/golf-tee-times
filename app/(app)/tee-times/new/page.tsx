@@ -142,12 +142,12 @@ export default function NewTeeTimePage() {
           type="button"
           onClick={() => router.push("/upcoming")}
           style={{ color: "#30D158" }}
-          className="flex items-center gap-0.5 text-sm font-medium"
+          className="flex items-center gap-0.5 text-sm font-medium active:opacity-50 transition-opacity duration-75"
         >
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel
         </button>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Tee Time</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16 pointer-events-none">New Tee Time</h1>
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 pt-6 space-y-6">

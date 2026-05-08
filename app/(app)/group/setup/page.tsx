@@ -43,7 +43,7 @@ export default function GroupSetupPage() {
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel
         </Link>
-        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16">New Group</h1>
+        <h1 className="text-[17px] font-semibold text-white flex-1 text-center -ml-16 pointer-events-none">New Group</h1>
       </div>
 
       <div className="px-4 pt-8">

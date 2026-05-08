@@ -80,7 +80,7 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
               src={photoUrl}
               alt="Group photo"
               className="w-full h-full object-cover cursor-pointer"
-              style={{ borderRadius: "0 0 20px 20px" }}
+              style={{ borderRadius: "0 0 20px 20px", objectPosition: "center 25%" }}
               onClick={() => setLightboxOpen(true)}
             />
           ) : (

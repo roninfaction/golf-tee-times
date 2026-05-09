@@ -7,10 +7,10 @@ export function PortraitLock() {
   const [landscape, setLandscape] = useState(false);
 
   useEffect(() => {
-    // Android PWA: try native API lock first
-    if (screen.orientation?.lock) {
-      screen.orientation.lock("portrait").catch(() => {});
-    }
+    // Android PWA: try native API lock first (lock() is not in TS lib typings)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const so = screen.orientation as any;
+    if (so?.lock) so.lock("portrait").catch(() => {});
 
     // iOS ignores both the manifest and the Screen Orientation API —
     // use a matchMedia overlay as the only reliable fallback.

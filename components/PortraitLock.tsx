@@ -15,6 +15,7 @@ export function PortraitLock() {
     // iOS ignores both the manifest and the Screen Orientation API —
     // use a matchMedia overlay as the only reliable fallback.
     const mql = window.matchMedia("(orientation: landscape) and (max-width: 1024px)");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLandscape(mql.matches);
     const handler = (e: MediaQueryListEvent) => setLandscape(e.matches);
     mql.addEventListener("change", handler);

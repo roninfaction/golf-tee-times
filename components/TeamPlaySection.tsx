@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { Users } from "lucide-react";
 
@@ -42,6 +42,7 @@ export function TeamPlaySection({
   const [saved, setSaved] = useState(false);
   const [teamNames, setTeamNames] = useState(["Team A", "Team B"]);
   const [token, setToken] = useState("");
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
     createClient().auth.getSession().then(({ data: { session } }) => {
@@ -60,12 +61,16 @@ export function TeamPlaySection({
         setTeamNames(t.map(tm => tm.name));
       }
     });
-    // Load existing assignments from rsvps
-    const init: Record<string, string | null> = {};
-    for (const r of rsvps) init[r.id] = r.team_id ?? null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAssignments(init);
-  }, [expanded, teeTimeId, token, rsvps]);
+    // Load existing assignments from rsvps — only on first open so saves aren't clobbered
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      const init: Record<string, string | null> = {};
+      for (const r of rsvps) init[r.id] = r.team_id ?? null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAssignments(init);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, teeTimeId, token]);
 
   function assignToTeam(teamId: string) {
     if (!selectedPlayer) return;
@@ -89,11 +94,28 @@ export function TeamPlaySection({
     });
 
     if (res.ok) {
-      const newTeams: Team[] = await res.json();
+      const rawNewTeams: Team[] = await res.json();
+      // Supabase response order isn't guaranteed — sort to match the teamNames order we sent
+      const filteredNames = teamNames.filter(Boolean);
+      const newTeams = filteredNames.map(name => rawNewTeams.find(t => t.name === name)!).filter(Boolean);
       setTeams(newTeams);
 
+      // Build old→new team ID mapping by index position.
+      // POST deletes old teams (FK cascade nulls rsvp.team_id) and inserts new ones with
+      // new UUIDs, so we must remap before PATCHing or all assignments silently fail.
+      const oldToNew: Record<string, string> = {};
+      for (let i = 0; i < newTeams.length; i++) {
+        if (teams[i]) oldToNew[teams[i].id] = newTeams[i].id;
+        oldToNew[`new-${i}`] = newTeams[i].id;
+      }
+      const remappedAssignments: Record<string, string | null> = {};
+      for (const [rsvpId, oldId] of Object.entries(assignments)) {
+        remappedAssignments[rsvpId] = oldId ? (oldToNew[oldId] ?? null) : null;
+      }
+      setAssignments(remappedAssignments);
+
       // Save assignments
-      const assignmentList = Object.entries(assignments)
+      const assignmentList = Object.entries(remappedAssignments)
         .map(([rsvpId, teamId]) => ({ rsvp_id: rsvpId, team_id: teamId }));
 
       if (assignmentList.length > 0) {
@@ -161,7 +183,7 @@ export function TeamPlaySection({
                 <div className="space-y-2">
                   {teamNames.map((name, i) => (
                     <div key={i} className="flex items-center gap-3 px-4 py-2.5 rounded-xl" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-                      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: TEAM_COLORS[i % TEAM_COLORS.length] }} />
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: teams[i]?.color ?? TEAM_COLORS[i % TEAM_COLORS.length] }} />
                       <input
                         type="text"
                         value={name}
@@ -246,21 +268,24 @@ export function TeamPlaySection({
               {/* Team tap targets (visible when a player is selected) */}
               {isCreator && selectedPlayer && (
                 <div className="flex gap-2 flex-wrap">
-                  {teamNames.filter(Boolean).map((name, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        const teamId = teams[i]?.id ?? `new-${i}`;
-                        setAssignments(prev => ({ ...prev, [selectedPlayer]: teamId }));
-                        setSelectedPlayer(null);
-                      }}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
-                      style={{ background: TEAM_COLORS[i % TEAM_COLORS.length] + "33", border: `1.5px solid ${TEAM_COLORS[i % TEAM_COLORS.length]}`, color: "white" }}
-                    >
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: TEAM_COLORS[i % TEAM_COLORS.length] }} />
-                      {name}
-                    </button>
-                  ))}
+                  {teamNames.filter(Boolean).map((name, i) => {
+                    const color = teams[i]?.color ?? TEAM_COLORS[i % TEAM_COLORS.length];
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          const teamId = teams[i]?.id ?? `new-${i}`;
+                          setAssignments(prev => ({ ...prev, [selectedPlayer]: teamId }));
+                          setSelectedPlayer(null);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
+                        style={{ background: color + "33", border: `1.5px solid ${color}`, color: "white" }}
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                        {name}
+                      </button>
+                    );
+                  })}
                   <button
                     onClick={() => { setAssignments(prev => ({ ...prev, [selectedPlayer]: null })); setSelectedPlayer(null); }}
                     className="px-4 py-2.5 rounded-xl text-sm font-medium"

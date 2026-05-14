@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     .from("tee_time_teams")
     .select("*")
     .eq("tee_time_id", teeTimeId)
-    .order("name");
+    .order("id");
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(teams ?? []);

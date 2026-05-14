@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { parseTeeTimeEmail } from "@/lib/email-parser";
 import { searchCourseByName } from "@/lib/google-places";
 import { sendPush } from "@/lib/onesignal";
+import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 import { localToUtcIso } from "@/lib/timezone";
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (!profile) {
-    return NextResponse.json({ error: "Unknown forwarder token", token: forwarderToken }, { status: 200 });
+    return NextResponse.json({ error: "Unknown forwarder token" }, { status: 400 });
   }
 
   // Prefer the user's designated forwarding group; fall back to oldest membership
@@ -90,12 +91,13 @@ export async function POST(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((userProfile as any)?.push_subscription) {
-      await sendPush({
+      const { expiredEndpoints: expiredOnParseFail } = await sendPush({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         subscriptions: [(userProfile as any).push_subscription],
         title: "Couldn't read that email",
         body: "We couldn't parse your tee time confirmation. Please add it manually.",
       });
+      await clearExpiredPushSubscriptions(expiredOnParseFail);
     }
     return NextResponse.json({ ok: true, parsed: false });
   }
@@ -166,12 +168,13 @@ export async function POST(request: NextRequest) {
     const teeDate = new Date(tee_datetime);
     const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: groupTz, weekday: "short", month: "short", day: "numeric" });
     const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: groupTz, hour: "numeric", minute: "2-digit", hour12: true });
-    await sendPush({
+    const { expiredEndpoints } = await sendPush({
       subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
       title: "New tee time added! ⛳",
       body: `${parsed.course_name} · ${dateStr} at ${timeStr}`,
       data: { teeTimeId: teeTime.id },
     });
+    await clearExpiredPushSubscriptions(expiredEndpoints);
   }
 
   return NextResponse.json({ ok: true, parsed: true, teeTimeId: teeTime.id });

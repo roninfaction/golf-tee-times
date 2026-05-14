@@ -128,10 +128,20 @@ export default function ProfilePage() {
       let sub: PushSubscription | null = null;
       let subError = "";
       try {
-        const swReg = await navigator.serviceWorker.ready;
-        // Unsubscribe any stale subscription first
+        // navigator.serviceWorker.ready hangs forever if the SW is stuck in installing state.
+        const swReg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Service worker not ready — try closing and reopening the app")), 8000)),
+        ]);
+        // Unsubscribe any stale subscription first.
+        // Use a timeout — iOS can hang indefinitely on unsubscribe() when Apple's servers are slow.
         const existing = await swReg.pushManager.getSubscription();
-        if (existing) await existing.unsubscribe();
+        if (existing) {
+          await Promise.race([
+            existing.unsubscribe(),
+            new Promise<void>(resolve => setTimeout(resolve, 5000)),
+          ]);
+        }
 
         sub = await Promise.race([
           swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes }),

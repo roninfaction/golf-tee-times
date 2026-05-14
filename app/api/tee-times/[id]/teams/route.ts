@@ -90,10 +90,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (membership?.role !== "admin") return NextResponse.json({ error: "Creator or admin only" }, { status: 403 });
   }
 
-  // Apply each assignment
+  // Apply each assignment — filter to rsvps that actually belong to this tee time
   await Promise.all(
     assignments.map(a =>
-      svc.from("rsvps").update({ team_id: a.team_id }).eq("id", a.rsvp_id)
+      svc.from("rsvps").update({ team_id: a.team_id }).eq("id", a.rsvp_id).eq("tee_time_id", teeTimeId)
     )
   );
 

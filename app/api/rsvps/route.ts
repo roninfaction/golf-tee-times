@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
+import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
@@ -47,12 +48,13 @@ export async function POST(request: NextRequest) {
 
     if (creator?.push_subscription) {
       const statusLabel = status === "accepted" ? "is going ✅" : status === "declined" ? "can't make it ❌" : "is maybe going 🤔";
-      await sendPush({
+      const { expiredEndpoints } = await sendPush({
         subscriptions: [creator.push_subscription as import("@/lib/web-push-server").PushSubscription],
         title: `${teeTime.course_name}`,
         body: `${responder?.display_name ?? "Someone"} ${statusLabel}`,
         data: { teeTimeId },
       });
+      await clearExpiredPushSubscriptions(expiredEndpoints);
     }
   }
 

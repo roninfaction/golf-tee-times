@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendPush } from "@/lib/onesignal";
+import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 export async function POST(request: NextRequest) {
   const { token, name } = await request.json();
@@ -64,12 +65,13 @@ export async function POST(request: NextRequest) {
       const subscriptions = (profiles ?? []).map((p: any) => p.push_subscription).filter(Boolean);
 
       if (subscriptions.length > 0) {
-        await sendPush({
+        const { expiredEndpoints } = await sendPush({
           subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
           title: `${(teeTime as { course_name: string }).course_name}`,
           body: `${name.trim()} filled the open spot! 🏌️`,
           data: { teeTimeId },
         });
+        await clearExpiredPushSubscriptions(expiredEndpoints);
       }
     }
   }

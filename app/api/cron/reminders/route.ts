@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendPush } from "@/lib/onesignal";
+import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
@@ -76,12 +77,13 @@ export async function POST(request: NextRequest) {
         const teeDate = new Date(tt.tee_datetime);
         const timeStr = teeDate.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true });
 
-        await sendPush({
+        const { expiredEndpoints } = await sendPush({
           subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
           title: `Tee time ${label}! ⛳`,
           body: `${tt.course_name} · ${timeStr}`,
           data: { teeTimeId: tt.id },
         });
+        await clearExpiredPushSubscriptions(expiredEndpoints);
         sent++;
       }
 

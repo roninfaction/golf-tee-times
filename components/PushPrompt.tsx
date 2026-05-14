@@ -10,6 +10,13 @@ export function PushPrompt() {
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
 
+    // Register the service worker on every app launch. Serwist auto-registration is disabled
+    // (it caused iOS stuck-installing), so we do it manually here. Safe to call repeatedly —
+    // the browser deduplicates registrations for the same URL.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
     const isAndroid = /Android/.test(navigator.userAgent);
     if (!isStandalone && !isAndroid) return;

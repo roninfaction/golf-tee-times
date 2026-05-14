@@ -20,8 +20,14 @@ export async function registerPush(): Promise<{ ok: boolean; reason?: string }> 
       (c) => c.charCodeAt(0)
     );
 
-    // Reuse existing subscription if present — avoids unnecessary re-keying
+    // Reuse existing subscription if present — avoids unnecessary re-keying.
+    // Exception: legacy FCM endpoints (fcm.googleapis.com/fcm/send/) were shut down
+    // by Google in June 2024. Force a fresh subscription so we get a working endpoint.
     let sub = await swReg.pushManager.getSubscription();
+    if (sub && sub.endpoint.includes("/fcm/send/")) {
+      await sub.unsubscribe();
+      sub = null;
+    }
     if (!sub) {
       sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
     }

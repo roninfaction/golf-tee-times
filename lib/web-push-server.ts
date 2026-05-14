@@ -116,7 +116,7 @@ export type PushSubscription = { endpoint: string; p256dh: string; auth: string 
 export async function sendWebPush(
   subscription: PushSubscription,
   notification: { title: string; body: string; data?: Record<string, string> }
-): Promise<{ ok: boolean; status?: number; body?: string }> {
+): Promise<{ ok: boolean; status?: number; body?: string; expired?: boolean }> {
   const publicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) {
@@ -141,15 +141,16 @@ export async function sendWebPush(
   });
 
   const ok = res.status === 201;
+  const expired = res.status === 410 || res.status === 404;
   const respBody = ok ? undefined : await res.text().catch(() => "");
-  return { ok, status: res.status, body: respBody };
+  return { ok, status: res.status, body: respBody, expired };
 }
 
 /** Send a push with no encrypted payload — fires push event with event.data=null on device.
  *  Used to test delivery independently of encryption. */
 export async function sendEmptyPush(
   subscription: PushSubscription
-): Promise<{ ok: boolean; status?: number; body?: string }> {
+): Promise<{ ok: boolean; status?: number; body?: string; expired?: boolean }> {
   const publicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) {
@@ -168,8 +169,9 @@ export async function sendEmptyPush(
   });
 
   const ok = res.status === 201;
+  const expired = res.status === 410 || res.status === 404;
   const respBody = ok ? undefined : await res.text().catch(() => "");
-  return { ok, status: res.status, body: respBody };
+  return { ok, status: res.status, body: respBody, expired };
 }
 
 export async function sendPush({
@@ -179,14 +181,22 @@ export async function sendPush({
   title: string;
   body: string;
   data?: Record<string, string>;
-}): Promise<void> {
-  if (!subscriptions.length) return;
+}): Promise<{ expiredEndpoints: string[] }> {
+  if (!subscriptions.length) return { expiredEndpoints: [] };
   const results = await Promise.allSettled(subscriptions.map((sub) => sendWebPush(sub, { title, body, data })));
-  for (const r of results) {
-    if (r.status === "fulfilled" && !r.value.ok) {
-      console.error(`[web-push] sendPush failed: status=${r.value.status} body=${r.value.body}`);
-    } else if (r.status === "rejected") {
+  const expiredEndpoints: string[] = [];
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.status === "fulfilled") {
+      if (!r.value.ok) {
+        console.error(`[web-push] sendPush failed: status=${r.value.status} body=${r.value.body}`);
+      }
+      if (r.value.expired) {
+        expiredEndpoints.push(subscriptions[i].endpoint);
+      }
+    } else {
       console.error("[web-push] sendPush threw:", r.reason);
     }
   }
+  return { expiredEndpoints };
 }

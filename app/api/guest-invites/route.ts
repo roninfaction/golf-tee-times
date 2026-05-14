@@ -66,20 +66,23 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient();
 
-  // Verify the tee time belongs to user's group
-  const { data: membership } = await svc
-    .from("group_members")
-    .select("group_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
   const { data: teeTime } = await svc
     .from("tee_times")
     .select("id, group_id, max_players, course_name")
     .eq("id", teeTimeId)
     .single();
 
-  if (!teeTime || !membership || teeTime.group_id !== membership.group_id) {
+  if (!teeTime) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Verify the user is a member of this specific tee time's group
+  const { data: membership } = await svc
+    .from("group_members")
+    .select("group_id")
+    .eq("user_id", user.id)
+    .eq("group_id", teeTime.group_id)
+    .maybeSingle();
+
+  if (!membership) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

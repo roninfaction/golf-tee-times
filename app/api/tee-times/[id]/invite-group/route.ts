@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
+import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -64,12 +65,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     const timeStr = teeDate.toLocaleTimeString("en-US", {
       timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
     });
-    await sendPush({
+    const { expiredEndpoints } = await sendPush({
       subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
       title: "You're invited! ⛳",
       body: `${tt.course_name} · ${dateStr} at ${timeStr} — tap to RSVP`,
       data: { teeTimeId },
     });
+    await clearExpiredPushSubscriptions(expiredEndpoints);
   }
 
   return NextResponse.json({ invited_count: otherMemberIds.length });

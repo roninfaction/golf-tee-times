@@ -18,6 +18,13 @@ export async function GET(request: NextRequest, { params }: Params) {
     .single();
 
   if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Access guard: must be creator or have an RSVP
+  const hasAccess =
+    data.created_by === user.id ||
+    (data.rsvps as { user_id: string }[]).some((r) => r.user_id === user.id);
+  if (!hasAccess) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
   return NextResponse.json(data);
 }
 

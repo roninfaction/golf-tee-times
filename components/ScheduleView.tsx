@@ -269,7 +269,7 @@ export function ScheduleView({ rows, groupTz }: { rows: ScheduleRow[]; groupTz: 
                     )}
                     <p className="font-semibold text-white text-[16px] truncate tracking-tight">{tt.course_name}</p>
                     <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.45)" }}>
-                      {formatTeeTime(tt.tee_datetime)} &middot; {tt.holes}H &middot; {tt.accepted_count}/{tt.max_players} going
+                      {formatTeeTime(tt.tee_datetime, groupTz)} &middot; {tt.holes}H &middot; {tt.accepted_count}/{tt.max_players} going
                     </p>
                   </div>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 mt-0.5" style={badgeStyle}>

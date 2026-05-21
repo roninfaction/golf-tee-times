@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 
-function getTomorrowStr() {
+function getTodayStr() {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-const DEFAULT_DATE = getTomorrowStr();
+const DEFAULT_DATE = getTodayStr();
 import { localToUtcIso } from "@/lib/timezone";
 import { CourseAutocomplete } from "@/components/CourseAutocomplete";
 import type { CourseDetails } from "@/lib/google-places";

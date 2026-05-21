@@ -10,6 +10,8 @@ import Link from "next/link";
 import type { TeeTime, Rsvp, GuestInvite, Profile, Course } from "@/lib/types";
 import { ScoreSection } from "@/components/ScoreSection";
 import { TeamPlaySection } from "@/components/TeamPlaySection";
+import { DeleteRsvpButton } from "@/components/DeleteRsvpButton";
+import { DeleteGuestInviteButton } from "@/components/DeleteGuestInviteButton";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -57,7 +59,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const { data: tt } = await svc
     .from("tee_times")
-    .select(`*, rsvps(*, team_id, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)), guest_invites(*)`)
+    .select(`*, group:groups(timezone), rsvps(*, team_id, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)), guest_invites(*)`)
     .eq("id", id)
     .single();
 
@@ -92,6 +94,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
     .order("tee_datetime", { ascending: true });
   const linkedTimes = (linkedRaw ?? []) as (TeeTime & { rsvps: { status: string }[]; guest_invites: { status: string }[] })[];
 
+  const groupTz = (teeTime as TeeTime & { group?: { timezone?: string } } & { rsvps: (Rsvp & { profile: Profile })[]; guest_invites: GuestInvite[] }).group?.timezone ?? "America/Los_Angeles";
   const isPast = new Date(teeTime.tee_datetime) < new Date();
   const myRsvp = teeTime.rsvps.find((r) => r.user_id === user.id);
 
@@ -129,7 +132,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             <div className="px-4 pt-3">
               <h1 className="text-[26px] font-bold text-white tracking-tight leading-tight mb-1">{teeTime.course_name}</h1>
               <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
-                {formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}
+                {formatTeeDateLong(teeTime.tee_datetime, groupTz)} at {formatTeeTime(teeTime.tee_datetime, groupTz)}
               </p>
               {isPast && (
                 <span className="inline-block mt-2 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
@@ -153,7 +156,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             </div>
             <h1 className="text-[26px] font-bold text-white tracking-tight leading-tight mb-1">{teeTime.course_name}</h1>
             <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
-              {formatTeeDateLong(teeTime.tee_datetime)} at {formatTeeTime(teeTime.tee_datetime)}
+              {formatTeeDateLong(teeTime.tee_datetime, groupTz)} at {formatTeeTime(teeTime.tee_datetime, groupTz)}
             </p>
             {isPast && (
               <span className="inline-block mt-2 text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
@@ -272,9 +275,14 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
                       )}
                     </div>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
-                    {cfg.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: cfg.bg, color: cfg.color }}>
+                      {cfg.label}
+                    </span>
+                    {teeTime.created_by === user.id && rsvp.user_id !== user.id && (
+                      <DeleteRsvpButton rsvpId={rsvp.id} />
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -292,7 +300,12 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
                       <span className="text-xs ml-1.5" style={{ color: "rgba(255,255,255,0.3)" }}>guest</span>
                     </div>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}>Going</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}>Going</span>
+                    {teeTime.created_by === user.id && (
+                      <DeleteGuestInviteButton guestInviteId={guest.id} />
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -303,9 +316,29 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           </div>
 
           {pendingGuests.length > 0 && (
-            <p className="text-xs mt-2 px-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-              {pendingGuests.length} invite link{pendingGuests.length !== 1 ? "s" : ""} pending
-            </p>
+            <div className="mt-2 rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              {pendingGuests.map((guest, i) => {
+                const isLast = i === pendingGuests.length - 1;
+                return (
+                  <div key={guest.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "rgba(201,168,76,0.12)", color: "rgba(201,168,76,0.7)" }}>
+                        ?
+                      </div>
+                      <span className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
+                        {guest.invitee_name ?? "Pending invite"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>Pending</span>
+                      {teeTime.created_by === user.id && (
+                        <DeleteGuestInviteButton guestInviteId={guest.id} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -366,7 +399,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
                       href={`/tee-times/${lt.id}`}
                       className="flex-1 flex items-center justify-between transition-opacity active:opacity-70"
                     >
-                      <span className="text-sm text-white">{formatTeeTime(lt.tee_datetime)}</span>
+                      <span className="text-sm text-white">{formatTeeTime(lt.tee_datetime, groupTz)}</span>
                       <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
                         {accepted}/{lt.max_players} confirmed
                       </span>

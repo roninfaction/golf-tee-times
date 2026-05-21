@@ -1,22 +1,21 @@
 import { utcIsoToPacificIcsLocal } from "@/lib/timezone";
 
-const TZ = "America/Los_Angeles";
+const DEFAULT_TZ = "America/Los_Angeles";
 
-// Format a tee time datetime string for display — always Pacific time
-export function formatTeeDate(isoString: string): string {
+export function formatTeeDate(isoString: string, tz = DEFAULT_TZ): string {
   const d = new Date(isoString);
   return d.toLocaleDateString("en-US", {
-    timeZone: TZ,
+    timeZone: tz,
     weekday: "short",
     month: "short",
     day: "numeric",
   });
 }
 
-export function formatTeeDateLong(isoString: string): string {
+export function formatTeeDateLong(isoString: string, tz = DEFAULT_TZ): string {
   const d = new Date(isoString);
   return d.toLocaleDateString("en-US", {
-    timeZone: TZ,
+    timeZone: tz,
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -24,17 +23,17 @@ export function formatTeeDateLong(isoString: string): string {
   });
 }
 
-export function formatTeeTime(isoString: string): string {
+export function formatTeeTime(isoString: string, tz = DEFAULT_TZ): string {
   const d = new Date(isoString);
   return d.toLocaleTimeString("en-US", {
-    timeZone: TZ,
+    timeZone: tz,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 }
 
-export function formatDaysUntil(isoString: string): string {
+export function formatDaysUntil(isoString: string, tz = DEFAULT_TZ): string {
   const d = new Date(isoString);
   const now = new Date();
   const diffMs = d.getTime() - now.getTime();
@@ -42,7 +41,7 @@ export function formatDaysUntil(isoString: string): string {
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
   if (diffDays < 7) return `In ${diffDays} days`;
-  return formatTeeDate(isoString);
+  return formatTeeDate(isoString, tz);
 }
 
 // Build a .ics calendar file content string — time anchored to Pacific timezone

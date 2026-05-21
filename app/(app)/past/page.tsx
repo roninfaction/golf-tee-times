@@ -26,7 +26,7 @@ export default async function PastPage({
 
   const { data: membership } = await svc
     .from("group_members")
-    .select("group_id")
+    .select("group_id, group:groups(timezone)")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -37,6 +37,8 @@ export default async function PastPage({
       </div>
     );
   }
+
+  const groupTz = (membership as { group_id: string; group?: { timezone?: string } }).group?.timezone ?? "America/Los_Angeles";
 
   const { data: myRsvpRows } = await svc
     .from("rsvps")
@@ -107,7 +109,7 @@ export default async function PastPage({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{tt.course_name}</p>
                     <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                      {formatTeeDate(tt.tee_datetime)} · {formatTeeTime(tt.tee_datetime)} · {tt.holes}H · {acceptedCount} played
+                      {formatTeeDate(tt.tee_datetime, groupTz)} · {formatTeeTime(tt.tee_datetime, groupTz)} · {tt.holes}H · {acceptedCount} played
                     </p>
                   </div>
                   <div className="flex items-center gap-2 ml-3 shrink-0">

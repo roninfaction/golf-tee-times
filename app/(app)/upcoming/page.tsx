@@ -39,8 +39,10 @@ export default async function UpcomingPage() {
   ]);
 
   const groupId = membership?.group_id;
+  const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
 
-  if (!groupId) {
+  // Only show "No group yet" if the user also has no accepted tee times to display.
+  if (!groupId && invitedIds.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: "rgba(201,168,76,0.15)" }}>
@@ -61,32 +63,34 @@ export default async function UpcomingPage() {
   const in60 = new Date(today);
   in60.setDate(today.getDate() + 60);
 
-  const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
-
   const fetchTeeTimes = unstable_cache(
-    async (gId: string, uId: string, ids: string[], from: string, to: string) => {
+    async (gId: string | null, uId: string, ids: string[], from: string, to: string) => {
       const svcInner = createServiceClient();
       let q = svcInner
         .from("tee_times")
         .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
-        .eq("group_id", gId)
         .gte("tee_datetime", from)
         .lte("tee_datetime", to)
         .order("tee_datetime", { ascending: true })
         .limit(50);
       if (ids.length > 0) {
-        q = q.or(`created_by.eq.${uId},id.in.(${ids.join(",")})`);
+        // Show all tee times the user has RSVPs for, regardless of group.
+        // Covers guest-invite acceptances converted to RSVPs and cross-group scenarios.
+        q = q.in("id", ids);
+      } else if (gId) {
+        // No RSVPs yet — show tee times they created in their active group as a fallback.
+        q = q.eq("group_id", gId).eq("created_by", uId);
       } else {
-        q = q.eq("created_by", uId);
+        return [];
       }
       const { data } = await q;
       return data ?? [];
     },
     ["upcoming-tee-times"],
-    { revalidate: 30, tags: [`tee-times-${groupId}`] }
+    { revalidate: 30, tags: groupId ? [`tee-times-${groupId}`] : ["upcoming-tee-times"] }
   );
 
-  const teeTimes = await fetchTeeTimes(groupId, user.id, invitedIds, today.toISOString(), in60.toISOString());
+  const teeTimes = await fetchTeeTimes(groupId ?? null, user.id, invitedIds, today.toISOString(), in60.toISOString());
 
   const groupTz = (membership?.group as unknown as { timezone?: string })?.timezone ?? "America/Los_Angeles";
 
@@ -114,10 +118,12 @@ export default async function UpcomingPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[28px] font-bold text-white tracking-tight">Schedule</h1>
-          <GroupSwitcher
-            activeGroupId={groupId}
-            groupName={(membership?.group as unknown as { name: string })?.name ?? "Your Group"}
-          />
+          {groupId && (
+            <GroupSwitcher
+              activeGroupId={groupId}
+              groupName={(membership?.group as unknown as { name: string })?.name ?? "Your Group"}
+            />
+          )}
         </div>
         <Link
           href="/tee-times/new"

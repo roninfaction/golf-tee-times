@@ -4,7 +4,7 @@ import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 export async function POST(request: NextRequest) {
-  const { token, name } = await request.json();
+  const { token, name, email } = await request.json();
 
   if (!token || !name?.trim()) {
     return NextResponse.json({ error: "token and name required" }, { status: 400 });
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await svc.rpc("accept_guest_invite", {
     p_token: token,
     p_name: name.trim(),
+    p_email: email?.trim() || null,
   });
 
   if (error) {

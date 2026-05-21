@@ -120,3 +120,26 @@ export async function POST(request: NextRequest) {
   const url = `${APP_URL}/fill/${invite.token}`;
   return NextResponse.json({ ok: true, token: invite.token, url }, { status: 201 });
 }
+
+export async function DELETE(request: NextRequest) {
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { guestInviteId } = await request.json();
+  if (!guestInviteId) return NextResponse.json({ error: "guestInviteId required" }, { status: 400 });
+
+  const svc = createServiceClient();
+
+  const { data: invite } = await svc.from("guest_invites").select("tee_time_id").eq("id", guestInviteId).single();
+  if (!invite) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const { data: teeTime } = await svc.from("tee_times").select("created_by").eq("id", invite.tee_time_id).single();
+  if (!teeTime || teeTime.created_by !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { error } = await svc.from("guest_invites").delete().eq("id", guestInviteId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}

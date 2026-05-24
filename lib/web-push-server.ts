@@ -141,7 +141,10 @@ export async function sendWebPush(
   });
 
   const ok = res.status === 201;
-  const expired = res.status === 410 || res.status === 404;
+  // 410/404: subscription explicitly gone. 401/403: VAPID key mismatch (subscription created
+  // with a different applicationServerKey — treat as unrecoverable so the DB record is cleared
+  // and the user gets prompted to re-register on next app open.
+  const expired = res.status === 410 || res.status === 404 || res.status === 401 || res.status === 403;
   const respBody = ok ? undefined : await res.text().catch(() => "");
   return { ok, status: res.status, body: respBody, expired };
 }

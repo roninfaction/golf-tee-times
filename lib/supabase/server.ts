@@ -3,9 +3,9 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://drnbwzzzlbxpcymnwxmv.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://aqcyuxxvgbyifdnhfzoq.supabase.co";
 const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRybmJ3enp6bGJ4cGN5bW53eG12Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwOTc5OTIsImV4cCI6MjA4ODY3Mzk5Mn0.TiMghSrdhaU0IzyvKOd2Qxv9lSauEW_tzN6MYUNWpTE";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxY3l1eHh2Z2J5aWZkbmhmem9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk2NTc5NjYsImV4cCI6MjA5NTIzMzk2Nn0.9mohEOHIlaJGf5ZCp57GDQmdLCMN4_zv17YVqmPNGhU";
 
 export async function createClient() {
   const cookieStore = await cookies();

@@ -28,6 +28,8 @@ export default async function PastPage({
     .from("group_members")
     .select("group_id, group:groups(timezone)")
     .eq("user_id", user.id)
+    .order("joined_at", { ascending: true })
+    .limit(1)
     .maybeSingle();
 
   if (!membership) {

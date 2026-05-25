@@ -9,7 +9,8 @@
  * on the GolfPack Cloudflare Pages app to send 24h and 2h tee time reminders.
  */
 export default {
-  async scheduled(_event, env, _ctx) {
+  async scheduled(event, env, _ctx) {
+    // Every 15 min: send tee time reminders
     const appUrl = env.APP_URL ?? "https://golf-tee-times.pages.dev";
     const cronSecret = env.CRON_SECRET ?? "";
 

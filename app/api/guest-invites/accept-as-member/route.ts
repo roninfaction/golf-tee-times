@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
 
 export async function POST(request: NextRequest) {
+  // Try cookie auth first; fall back to Bearer token (handles iOS PWA where cookies
+  // aren't shared with Safari but the client-side session supplies the token)
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user: cookieUser } } = await supabase.auth.getUser();
+  const user = cookieUser ?? await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { token } = await request.json();

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, Flag, Clock, Users } from "lucide-react";
 import { formatTeeDateLong, formatTeeTime, buildIcsContent } from "@/lib/format";
+import { createClient } from "@/lib/supabase/browser";
 
 type InviteData = {
   invite: { status: string; inviter_name: string };
@@ -13,20 +14,46 @@ type InviteData = {
 
 type LoggedInUser = { id: string; displayName: string };
 
-export function FillSpotClient({ token, data, groupTz, loggedInUser }: { token: string; data: InviteData; groupTz: string; loggedInUser: LoggedInUser | null }) {
+export function FillSpotClient({ token, data, groupTz, loggedInUser: serverLoggedInUser }: { token: string; data: InviteData; groupTz: string; loggedInUser: LoggedInUser | null }) {
+  const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(serverLoggedInUser);
+  // Access token for cases where session was detected client-side but cookies aren't synced yet
+  const [clientAccessToken, setClientAccessToken] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
 
+  // Client-side auth check — catches cases where browser has a session the server didn't see
+  // (e.g., session stored in localStorage but cookies not yet synced to this browser context)
+  useEffect(() => {
+    if (serverLoggedInUser) return;
+    const supabase = createClient();
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      setClientAccessToken(session.access_token);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      setLoggedInUser({
+        id: session.user.id,
+        displayName: (profile as { display_name: string } | null)?.display_name ?? session.user.email ?? "You",
+      });
+    });
+  }, [serverLoggedInUser]);
+
   async function handleAcceptAsMember() {
     setLoading(true);
     setError("");
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (clientAccessToken) headers["Authorization"] = `Bearer ${clientAccessToken}`;
+
     const res = await fetch("/api/guest-invites/accept-as-member", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ token }),
     });
 
@@ -226,6 +253,18 @@ export function FillSpotClient({ token, data, groupTz, loggedInUser }: { token: 
             First to accept gets the spot. No account needed.
           </p>
         </form>
+
+        <div className="mt-6 pt-5 border-t border-slate-800 text-center">
+          <p className="text-slate-500 text-sm">
+            Already a GolfPack member?{" "}
+            <a
+              href={`/login?next=/fill/${token}`}
+              className="text-green-500 font-medium hover:text-green-400"
+            >
+              Log in to accept
+            </a>
+          </p>
+        </div>
       </div>
     </div>
   );

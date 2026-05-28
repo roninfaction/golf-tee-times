@@ -12,6 +12,7 @@ import { ScoreSection } from "@/components/ScoreSection";
 import { TeamPlaySection } from "@/components/TeamPlaySection";
 import { DeleteRsvpButton } from "@/components/DeleteRsvpButton";
 import { DeleteGuestInviteButton } from "@/components/DeleteGuestInviteButton";
+import { InviteMemberButton } from "@/components/InviteMemberButton";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -363,6 +364,15 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
         {/* Invite Group — creator only, future tee times */}
         {!isPast && teeTime.created_by === user.id && (
           <InviteGroupButton teeTimeId={teeTime.id} />
+        )}
+
+        {/* Invite individual member — creator only, future tee times */}
+        {!isPast && teeTime.created_by === user.id && (
+          <InviteMemberButton
+            teeTimeId={teeTime.id}
+            groupId={teeTime.group_id}
+            existingRsvpUserIds={teeTime.rsvps.map((r) => r.user_id)}
+          />
         )}
 
         {/* Invite guest — open spots only */}

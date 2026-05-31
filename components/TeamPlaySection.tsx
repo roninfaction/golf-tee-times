@@ -19,7 +19,7 @@ const FORMATS = [
 
 const TEAM_COLORS = ["#30D158", "#C9A84C", "#0A84FF", "#FF453A", "#BF5AF2", "#FF9F0A"];
 
-type Rsvp = { id: string; user_id: string; status: string; profile: { display_name: string; avatar_url: string | null }; team_id: string | null };
+type Rsvp = { id: string; user_id: string; status: string; profile: { display_name: string; avatar_url: string | null }; team_id: string | null; is_guest?: boolean };
 type Team = { id: string; name: string; color: string | null };
 
 export function TeamPlaySection({
@@ -116,7 +116,11 @@ export function TeamPlaySection({
 
       // Save assignments
       const assignmentList = Object.entries(remappedAssignments)
-        .map(([rsvpId, teamId]) => ({ rsvp_id: rsvpId, team_id: teamId }));
+        .map(([rsvpId, teamId]) => ({
+          rsvp_id: rsvpId,
+          team_id: teamId,
+          type: rsvps.find(r => r.id === rsvpId)?.is_guest ? "guest" : "rsvp",
+        }));
 
       if (assignmentList.length > 0) {
         await fetch(`/api/tee-times/${teeTimeId}/teams`, {

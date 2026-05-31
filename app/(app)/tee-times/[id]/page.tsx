@@ -60,7 +60,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const { data: tt } = await svc
     .from("tee_times")
-    .select(`*, group:groups(timezone), rsvps(*, team_id, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)), guest_invites(*)`)
+    .select(`*, group:groups(timezone), rsvps(*, team_id, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)), guest_invites(*), tee_time_teams(*)`)
     .eq("id", id)
     .single();
 
@@ -97,6 +97,10 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const groupTz = (teeTime as TeeTime & { group?: { timezone?: string } } & { rsvps: (Rsvp & { profile: Profile })[]; guest_invites: GuestInvite[] }).group?.timezone ?? "America/Los_Angeles";
   const isPast = new Date(teeTime.tee_datetime) < new Date();
+  // Show scores any time on the day of the tee time or later (not just after the exact start time)
+  const teeDateStr = new Date(teeTime.tee_datetime).toLocaleDateString("en-CA", { timeZone: groupTz });
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: groupTz });
+  const isTodayOrPast = teeDateStr <= todayStr;
   const myRsvp = teeTime.rsvps.find((r) => r.user_id === user.id);
 
   const acceptedGroup = teeTime.rsvps.filter((r) => r.status === "accepted");
@@ -349,15 +353,26 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             teeTimeId={teeTime.id}
             isCreator={teeTime.created_by === user.id}
             currentFormat={(teeTime as TeeTime & { format?: string | null }).format ?? null}
-            rsvps={teeTime.rsvps.map(r => ({
-              id: r.id,
-              user_id: r.user_id,
-              status: r.status,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              profile: { display_name: r.profile?.display_name ?? "?", avatar_url: (r.profile as any)?.avatar_url ?? null },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              team_id: (r as any).team_id ?? null,
-            }))}
+            rsvps={[
+              ...teeTime.rsvps.map(r => ({
+                id: r.id,
+                user_id: r.user_id,
+                status: r.status,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                profile: { display_name: r.profile?.display_name ?? "?", avatar_url: (r.profile as any)?.avatar_url ?? null },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                team_id: (r as any).team_id ?? null,
+              })),
+              ...teeTime.guest_invites.filter(g => g.status === "accepted").map(g => ({
+                id: g.id,
+                user_id: "",
+                status: "accepted" as const,
+                profile: { display_name: g.accepted_name ?? g.invitee_name ?? "Guest", avatar_url: null },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                team_id: (g as any).team_id ?? null,
+                is_guest: true,
+              })),
+            ]}
           />
         )}
 
@@ -428,9 +443,32 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Score section — past tee times where user played */}
-        {isPast && myRsvp?.status === "accepted" && (
-          <ScoreSection teeTimeId={teeTime.id} userId={user.id} />
+        {/* Score section — day-of or past tee times where user played */}
+        {isTodayOrPast && myRsvp?.status === "accepted" && (
+          <ScoreSection
+            teeTimeId={teeTime.id}
+            userId={user.id}
+            isCreator={teeTime.created_by === user.id}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            teams={(teeTime as any).tee_time_teams ?? []}
+            rsvps={teeTime.rsvps.map(r => ({
+              id: r.id,
+              user_id: r.user_id,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              team_id: (r as any).team_id ?? null,
+              display_name: r.profile?.display_name ?? "?",
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              handicap_index: (r.profile as any)?.ghin_handicap_index ?? null,
+            }))}
+            guests={teeTime.guest_invites
+              .filter(g => g.status === "accepted")
+              .map(g => ({
+                id: g.id,
+                accepted_name: g.accepted_name ?? g.invitee_name ?? "Guest",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                team_id: (g as any).team_id ?? null,
+              }))}
+          />
         )}
       </div>
     </div>

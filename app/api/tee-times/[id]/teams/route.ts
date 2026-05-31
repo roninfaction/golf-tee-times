@@ -69,7 +69,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { id: teeTimeId } = await params;
   const { assignments } = await request.json() as {
-    assignments: { rsvp_id: string; team_id: string | null }[];
+    assignments: { rsvp_id: string; team_id: string | null; type?: "rsvp" | "guest" }[];
   };
 
   if (!assignments?.length) return NextResponse.json({ error: "assignments required" }, { status: 400 });
@@ -90,12 +90,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (membership?.role !== "admin") return NextResponse.json({ error: "Creator or admin only" }, { status: 403 });
   }
 
-  // Apply each assignment — filter to rsvps that actually belong to this tee time
-  await Promise.all(
-    assignments.map(a =>
+  // Apply each assignment — route to rsvps or guest_invites based on type
+  const rsvpAssignments = assignments.filter(a => a.type !== "guest");
+  const guestAssignments = assignments.filter(a => a.type === "guest");
+
+  await Promise.all([
+    ...rsvpAssignments.map(a =>
       svc.from("rsvps").update({ team_id: a.team_id }).eq("id", a.rsvp_id).eq("tee_time_id", teeTimeId)
-    )
-  );
+    ),
+    ...guestAssignments.map(a =>
+      svc.from("guest_invites").update({ team_id: a.team_id }).eq("id", a.rsvp_id).eq("tee_time_id", teeTimeId)
+    ),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

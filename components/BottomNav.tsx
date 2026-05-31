@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Calendar, Plus, Users, User } from "lucide-react";
+import { Calendar, Clock, Plus, Users, User } from "lucide-react";
 
 const navItems = [
   { href: "/upcoming", label: "Schedule", icon: Calendar },
+  { href: "/past", label: "History", icon: Clock },
   { href: "/tee-times/new", label: "Add", icon: Plus, accent: true },
   { href: "/group", label: "Group", icon: Users },
   { href: "/profile", label: "Profile", icon: User },

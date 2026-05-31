@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const { data, error } = await svc
     .from("round_scores")
-    .select("*, profile:profiles(id, display_name, avatar_url, ghin_handicap_index)")
+    .select("*, profile:profiles(id, display_name, avatar_url, ghin_handicap_index), guest_invite:guest_invites(id, accepted_name, team_id)")
     .eq("tee_time_id", teeTimeId)
     .order("gross_score", { ascending: true });
 
@@ -22,14 +22,14 @@ export async function GET(request: NextRequest, { params }: Params) {
   return NextResponse.json(data ?? []);
 }
 
-// POST /api/tee-times/[id]/scores — upsert a score for the authenticated user
+// POST /api/tee-times/[id]/scores — upsert a score for the authenticated user (or a guest, creator only)
 export async function POST(request: NextRequest, { params }: Params) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: teeTimeId } = await params;
   const body = await request.json();
-  const { gross_score, handicap_used, scorecard_image_url, source, notes } = body;
+  const { gross_score, handicap_used, scorecard_image_url, source, notes, guest_invite_id } = body;
 
   if (!gross_score || gross_score < 50 || gross_score > 180) {
     return NextResponse.json({ error: "gross_score must be between 50 and 180" }, { status: 400 });
@@ -37,15 +37,54 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
-  // Verify user has an RSVP to this tee time
-  const { data: rsvp } = await svc
-    .from("rsvps")
-    .select("id")
-    .eq("tee_time_id", teeTimeId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  if (guest_invite_id) {
+    // Creator-only: post score on behalf of a guest
+    const { data: tt } = await svc
+      .from("tee_times")
+      .select("created_by")
+      .eq("id", teeTimeId)
+      .single();
+    if (!tt || tt.created_by !== user.id) {
+      return NextResponse.json({ error: "Only the creator can post scores for guests" }, { status: 403 });
+    }
 
-  if (!rsvp) return NextResponse.json({ error: "You are not on this tee time" }, { status: 403 });
+    // Verify the guest_invite belongs to this tee time
+    const { data: invite } = await svc
+      .from("guest_invites")
+      .select("id")
+      .eq("id", guest_invite_id)
+      .eq("tee_time_id", teeTimeId)
+      .maybeSingle();
+    if (!invite) return NextResponse.json({ error: "Guest not found on this tee time" }, { status: 404 });
+
+    const { data, error } = await svc
+      .from("round_scores")
+      .upsert({
+        tee_time_id: teeTimeId,
+        user_id: null,
+        guest_invite_id,
+        gross_score: parseInt(gross_score),
+        handicap_used: handicap_used ?? null,
+        scorecard_image_url: scorecard_image_url ?? null,
+        source: source ?? "manual",
+        notes: notes ?? null,
+      }, { onConflict: "tee_time_id,guest_invite_id" })
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data, { status: 201 });
+  }
+
+  // Standard: post own score — verify RSVP or creator status
+  const [{ data: rsvp }, { data: tt }] = await Promise.all([
+    svc.from("rsvps").select("id").eq("tee_time_id", teeTimeId).eq("user_id", user.id).maybeSingle(),
+    svc.from("tee_times").select("created_by").eq("id", teeTimeId).single(),
+  ]);
+
+  if (!rsvp && tt?.created_by !== user.id) {
+    return NextResponse.json({ error: "You are not on this tee time" }, { status: 403 });
+  }
 
   const { data, error } = await svc
     .from("round_scores")

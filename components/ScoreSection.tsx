@@ -68,7 +68,7 @@ export function ScoreSection({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
-  const [ocrConfidence, setOcrConfidence] = useState<"high" | "low" | null>(null);
+  const [ocrConfidence, setOcrConfidence] = useState<"high" | "low" | "failed" | null>(null);
   const [scorecardPath, setScorecardPath] = useState<string | null>(null);
   const [scorecardPreviewUrl, setScorecardPreviewUrl] = useState<string | null>(null);
 
@@ -180,6 +180,8 @@ export function ScoreSection({
       const { gross_score, confidence } = await ocrRes.json();
       setGrossScore(String(gross_score));
       setOcrConfidence(confidence);
+    } else {
+      setOcrConfidence("failed");
     }
     setOcrLoading(false);
   }
@@ -528,42 +530,76 @@ export function ScoreSection({
         <form onSubmit={handleSubmit} className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
           <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
+            {/* Camera / photo thumbnail */}
             {scorecardPreviewUrl ? (
-              <button type="button" onClick={() => openLightbox(scorecardPath!)} className="shrink-0">
-                <img src={scorecardPreviewUrl} alt="Scorecard" className="w-12 h-12 rounded-xl object-cover" />
+              <button type="button" onClick={() => !ocrLoading && openLightbox(scorecardPath!)} className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden">
+                <img src={scorecardPreviewUrl} alt="Scorecard" className="w-full h-full object-cover" />
+                {(uploading || ocrLoading) && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl" style={{ background: "rgba(0,0,0,0.6)" }}>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  </div>
+                )}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || ocrLoading}
-                className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 relative"
                 style={{ background: "rgba(255,255,255,0.07)", border: `0.5px solid ${CARD_BORDER}` }}
               >
-                <Camera size={20} className="text-white/40" />
+                {uploading || ocrLoading
+                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Camera size={20} className="text-white/40" />}
               </button>
             )}
             <div className="flex-1">
-              {uploading && <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>Uploading…</p>}
-              {ocrLoading && <p className="text-xs" style={{ color: GOLD }}>Reading scorecard…</p>}
-              {ocrConfidence === "high" && <p className="text-xs" style={{ color: "#30D158" }}>Score detected — confirm below</p>}
-              {ocrConfidence === "low" && <p className="text-xs" style={{ color: "#FF9F0A" }}>Could not read clearly — check below</p>}
+              {uploading && <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>Uploading…</p>}
+              {ocrLoading && <p className="text-sm font-semibold" style={{ color: GOLD }}>Reading scorecard…</p>}
+              {ocrConfidence === "high" && (
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "#30D158" }}>Score detected!</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Check the score below and tap Save</p>
+                </div>
+              )}
+              {ocrConfidence === "low" && (
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "#FF9F0A" }}>Couldn&apos;t read clearly</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Check the score below and correct if needed</p>
+                </div>
+              )}
+              {ocrConfidence === "failed" && (
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Scan failed</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Enter score manually below</p>
+                </div>
+              )}
               {!uploading && !ocrLoading && !ocrConfidence && (
-                <button type="button" onClick={() => fileRef.current?.click()} className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  {scorecardPreviewUrl ? "Replace photo" : "Take a photo of your scorecard"}
+                <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
+                  {scorecardPreviewUrl ? "Replace photo" : "Scan your scorecard"}
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex items-center" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+          <div className="flex items-center" style={{
+            borderBottom: `0.5px solid ${DIVIDER}`,
+            background: (ocrConfidence === "high" || ocrConfidence === "low") && grossScore ? "rgba(48,209,88,0.06)" : "transparent",
+            transition: "background 0.4s",
+          }}>
             <span className="pl-4 text-sm shrink-0" style={{ color: "rgba(255,255,255,0.4)" }}>Gross</span>
             <input
               type="number" min="50" max="180"
-              value={grossScore} onChange={e => setGrossScore(e.target.value)}
+              value={grossScore} onChange={e => { setGrossScore(e.target.value); setOcrConfidence(null); }}
               placeholder="e.g. 88" required
               className="flex-1 px-3 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20"
+              style={{ fontWeight: (ocrConfidence === "high" || ocrConfidence === "low") && grossScore ? 600 : 400 }}
             />
+            {(ocrConfidence === "high" || ocrConfidence === "low") && grossScore && (
+              <span className="pr-3 text-xs shrink-0" style={{ color: ocrConfidence === "high" ? "#30D158" : "#FF9F0A" }}>
+                {ocrConfidence === "high" ? "AI read" : "unverified"}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>

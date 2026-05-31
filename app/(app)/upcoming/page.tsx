@@ -17,26 +17,24 @@ export default async function UpcomingPage() {
 
   const svc = createServiceClient();
 
-  // Resolve active group: cookie → profile.active_group_id → oldest membership
+  // Resolve active group: cookie → oldest membership
   const cookieStore = await cookies();
   const cookieGroupId = cookieStore.get("golfpack_active_group")?.value;
 
-  let membershipQuery = svc
-    .from("group_members")
-    .select("group_id, group:groups(id, name, timezone)")
-    .eq("user_id", user.id);
-
-  if (cookieGroupId) {
-    membershipQuery = membershipQuery.eq("group_id", cookieGroupId);
-  } else {
-    membershipQuery = membershipQuery.order("joined_at", { ascending: true });
-  }
-
-  // Run membership lookup and RSVP fetch in parallel — both only need user.id.
-  const [{ data: membership }, { data: myRsvpRows }] = await Promise.all([
-    membershipQuery.maybeSingle(),
+  // Fetch all memberships and RSVP list in parallel
+  const [{ data: allMemberships }, { data: myRsvpRows }] = await Promise.all([
+    svc
+      .from("group_members")
+      .select("group_id, group:groups(id, name, timezone)")
+      .eq("user_id", user.id)
+      .order("joined_at", { ascending: true }),
     svc.from("rsvps").select("tee_time_id").eq("user_id", user.id),
   ]);
+
+  // Pick cookie-matched group; fall back to oldest when cookie is stale or absent
+  const membership = cookieGroupId
+    ? ((allMemberships ?? []).find(m => m.group_id === cookieGroupId) ?? allMemberships?.[0] ?? null)
+    : (allMemberships?.[0] ?? null);
 
   const groupId = membership?.group_id;
   const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);

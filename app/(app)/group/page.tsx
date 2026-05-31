@@ -8,38 +8,22 @@ export default async function GroupRedirectPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Check cookie first for fast redirect
   const cookieStore = await cookies();
   const cookieGroupId = cookieStore.get("golfpack_active_group")?.value;
 
-  if (cookieGroupId) {
-    redirect(`/group/${cookieGroupId}`);
-  }
-
-  // Fall back to DB
   const svc = createServiceClient();
-  const { data: profile } = await svc
-    .from("profiles")
-    .select("active_group_id")
-    .eq("id", user.id)
-    .maybeSingle();
 
-  if (profile?.active_group_id) {
-    redirect(`/group/${profile.active_group_id}`);
-  }
-
-  // Find oldest membership
-  const { data: membership } = await svc
+  // Load all memberships, pick cookie-matched group or oldest
+  const { data: memberships } = await svc
     .from("group_members")
     .select("group_id")
     .eq("user_id", user.id)
-    .order("joined_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .order("joined_at", { ascending: true });
 
-  if (membership?.group_id) {
-    redirect(`/group/${membership.group_id}`);
-  }
+  const targetId = cookieGroupId && memberships?.some(m => m.group_id === cookieGroupId)
+    ? cookieGroupId
+    : memberships?.[0]?.group_id;
 
+  if (targetId) redirect(`/group/${targetId}`);
   redirect("/groups");
 }

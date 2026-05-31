@@ -158,7 +158,7 @@ export function ScoreSection({
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) { setUploading(false); return; }
 
     const ext = file.name.split(".").pop() ?? "jpg";
     const path = `${userId}/${teeTimeId}.${ext}`;
@@ -171,16 +171,44 @@ export function ScoreSection({
     setUploading(false);
     setOcrLoading(true);
 
-    const ocrRes = await fetch("/api/scores/ocr", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ storage_path: path }),
-    });
-    if (ocrRes.ok) {
-      const { gross_score, confidence } = await ocrRes.json();
-      setGrossScore(String(gross_score));
-      setOcrConfidence(confidence);
-    } else {
+    try {
+      const ocrRes = await fetch("/api/scores/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ storage_path: path }),
+      });
+
+      if (ocrRes.ok) {
+        const { gross_score, confidence } = await ocrRes.json();
+        setGrossScore(String(gross_score));
+        setOcrConfidence(confidence);
+
+        // Auto-save immediately — user can edit via pencil if wrong
+        const saveRes = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            gross_score,
+            handicap_used: handicap ? parseFloat(handicap) : null,
+            scorecard_image_url: path,
+            source: "photo_ocr",
+          }),
+        });
+        if (saveRes.ok) {
+          const newScore = await saveRes.json() as Score;
+          setMyScore(newScore);
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3000);
+          setScores(prev => {
+            const filtered = prev.filter(s => s.user_id !== userId);
+            return [...filtered, { ...newScore, profile: { id: userId, display_name: "You", avatar_url: null }, guest_invite: null }]
+              .sort((a, b) => a.gross_score - b.gross_score);
+          });
+        }
+      } else {
+        setOcrConfidence("failed");
+      }
+    } catch {
       setOcrConfidence("failed");
     }
     setOcrLoading(false);
@@ -558,20 +586,20 @@ export function ScoreSection({
               {ocrLoading && <p className="text-sm font-semibold" style={{ color: GOLD }}>Reading scorecard…</p>}
               {ocrConfidence === "high" && (
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: "#30D158" }}>Score detected!</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Check the score below and tap Save</p>
+                  <p className="text-sm font-semibold" style={{ color: "#30D158" }}>Score saved!</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil in the scores below to edit</p>
                 </div>
               )}
               {ocrConfidence === "low" && (
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: "#FF9F0A" }}>Couldn&apos;t read clearly</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Check the score below and correct if needed</p>
+                  <p className="text-sm font-semibold" style={{ color: "#FF9F0A" }}>Saved — low confidence</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil in the scores below to verify</p>
                 </div>
               )}
               {ocrConfidence === "failed" && (
                 <div>
-                  <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Scan failed</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Enter score manually below</p>
+                  <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Couldn&apos;t read scorecard</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Enter your score below manually</p>
                 </div>
               )}
               {!uploading && !ocrLoading && !ocrConfidence && (

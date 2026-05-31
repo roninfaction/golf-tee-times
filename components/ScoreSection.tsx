@@ -78,7 +78,7 @@ export function ScoreSection({
   const [guestSaved, setGuestSaved] = useState<Record<string, boolean>>({});
 
   // Group scan state (creator only)
-  const [groupStep, setGroupStep] = useState<"idle" | "uploading" | "processing" | "review">("idle");
+  const [groupStep, setGroupStep] = useState<"idle" | "uploading" | "processing" | "review" | "error">("idle");
   const [groupScanPath, setGroupScanPath] = useState<string | null>(null);
   const [groupScanPreviewUrl, setGroupScanPreviewUrl] = useState<string | null>(null);
   const [groupPlayers, setGroupPlayers] = useState<GroupScanPlayer[]>([]);
@@ -305,7 +305,7 @@ export function ScoreSection({
       body: JSON.stringify({ storage_path: path }),
     });
 
-    if (!res.ok) { setGroupStep("idle"); return; }
+    if (!res.ok) { setGroupStep("error"); return; }
     const { players } = await res.json() as { players: Omit<GroupScanPlayer, "edited_gross" | "edited_handicap">[] };
 
     setGroupPlayers(players.map(p => ({
@@ -313,6 +313,34 @@ export function ScoreSection({
       edited_gross: p.gross_score != null ? String(p.gross_score) : "",
       edited_handicap: p.handicap_index != null ? String(p.handicap_index) : "",
     })));
+    setGroupStep("review");
+  }
+
+  function handleEnterManually() {
+    // Build player list from rsvps + guests with empty scores for manual entry
+    const players: GroupScanPlayer[] = [
+      ...rsvps.map(r => ({
+        display_name: r.display_name,
+        user_id: r.user_id,
+        guest_invite_id: null,
+        handicap_index: r.handicap_index,
+        gross_score: null,
+        confidence: null,
+        edited_gross: "",
+        edited_handicap: r.handicap_index != null ? String(r.handicap_index) : "",
+      })),
+      ...guests.map(g => ({
+        display_name: g.accepted_name,
+        user_id: null,
+        guest_invite_id: g.id,
+        handicap_index: null,
+        gross_score: null,
+        confidence: null,
+        edited_gross: "",
+        edited_handicap: "",
+      })),
+    ];
+    setGroupPlayers(players);
     setGroupStep("review");
   }
 
@@ -463,6 +491,36 @@ export function ScoreSection({
             {(groupStep === "uploading" || groupStep === "processing") && (
               <div className="px-4 py-4 rounded-2xl text-sm" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}`, color: GOLD }}>
                 {groupStep === "uploading" ? "Uploading photo…" : "Reading scorecard with AI…"}
+              </div>
+            )}
+
+            {groupStep === "error" && (
+              <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                {groupScanPreviewUrl && (
+                  <div className="px-4 pt-3 pb-2">
+                    <img src={groupScanPreviewUrl} alt="Group scorecard" className="w-full h-28 object-cover rounded-xl" />
+                  </div>
+                )}
+                <div className="px-4 pb-2">
+                  <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Couldn&apos;t read scorecard</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>AI couldn&apos;t extract scores — enter them manually below</p>
+                </div>
+                <div className="flex gap-2 px-4 pb-4">
+                  <button
+                    onClick={handleEnterManually}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{ background: "rgba(48,209,88,0.12)", color: "#30D158" }}
+                  >
+                    Enter scores manually
+                  </button>
+                  <button
+                    onClick={() => groupFileRef.current?.click()}
+                    className="py-2.5 px-4 rounded-xl text-sm font-semibold"
+                    style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}
+                  >
+                    Try again
+                  </button>
+                </div>
               </div>
             )}
 

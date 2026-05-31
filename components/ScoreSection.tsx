@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, ScanLine, X } from "lucide-react";
+import { Camera, Pencil, ScanLine, X } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -18,6 +18,7 @@ type RsvpWithTeam = {
   handicap_index: number | null;
 };
 type GuestEntry = { id: string; accepted_name: string; team_id: string | null };
+type EditingScore = { scoreId: string; gross: string; handicap: string; targetUserId: string | null; guestInviteId: string | null };
 
 type Score = {
   id: string;
@@ -84,6 +85,14 @@ export function ScoreSection({
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupSaved, setGroupSaved] = useState(false);
 
+  // Saved group scan photo (loaded from DB on mount)
+  const [savedGroupScanPath, setSavedGroupScanPath] = useState<string | null>(null);
+  const [savedGroupScanUrl, setSavedGroupScanUrl] = useState<string | null>(null);
+
+  // Inline score editing
+  const [editingScore, setEditingScore] = useState<EditingScore | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
   // Shared
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -125,6 +134,16 @@ export function ScoreSection({
           if (s.guest_invite_id) guestInit[s.guest_invite_id] = String(s.gross_score);
         }
         if (Object.keys(guestInit).length) setGuestScores(prev => ({ ...guestInit, ...prev }));
+
+        // Load saved group scan photo if any score references one
+        const groupScore = data.find(s => s.scorecard_image_url?.includes("_group"));
+        if (groupScore?.scorecard_image_url) {
+          setSavedGroupScanPath(groupScore.scorecard_image_url);
+          const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(
+            groupScore.scorecard_image_url.replace("scorecards/", ""), 300
+          );
+          if (signed?.signedUrl) setSavedGroupScanUrl(signed.signedUrl);
+        }
       }
     }
     load();
@@ -285,9 +304,11 @@ export function ScoreSection({
           handicap_used: p.edited_handicap ? parseFloat(p.edited_handicap) : null,
           source: groupScanPath ? "photo_ocr" : "manual",
           scorecard_image_url: groupScanPath,
-          ...(p.user_id ? {} : { guest_invite_id: p.guest_invite_id }),
-          // For own user_id entries, the API uses the token's user_id; for others we pass user_id via guest route
-          // Creator posting their own score uses the normal path; for other members we need user_id — API handles this
+          ...(p.guest_invite_id
+            ? { guest_invite_id: p.guest_invite_id }
+            : p.user_id && p.user_id !== userId
+              ? { target_user_id: p.user_id }
+              : {}),
         }),
       })
     ));
@@ -296,7 +317,15 @@ export function ScoreSection({
     const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
-    if (res.ok) setScores(await res.json());
+    if (res.ok) {
+      const data = await res.json() as Score[];
+      setScores(data);
+      // Show the group scan photo in the Scores section
+      if (groupScanPath) {
+        setSavedGroupScanPath(groupScanPath);
+        setSavedGroupScanUrl(groupScanPreviewUrl);
+      }
+    }
 
     setGroupSaving(false);
     setGroupSaved(true);
@@ -309,6 +338,42 @@ export function ScoreSection({
       path.replace("scorecards/", ""), 120
     );
     if (signed?.signedUrl) { setLightboxUrl(signed.signedUrl); setLightboxOpen(true); }
+  }
+
+  async function handleEditSave() {
+    if (!editingScore?.gross) return;
+    setEditSaving(true);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const body: Record<string, unknown> = {
+      gross_score: parseInt(editingScore.gross),
+      handicap_used: editingScore.handicap ? parseFloat(editingScore.handicap) : null,
+      source: "manual",
+    };
+    if (editingScore.guestInviteId) {
+      body.guest_invite_id = editingScore.guestInviteId;
+    } else if (editingScore.targetUserId && editingScore.targetUserId !== userId) {
+      body.target_user_id = editingScore.targetUserId;
+    }
+
+    const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      const updated = await res.json() as Score;
+      setScores(prev => prev.map(s =>
+        s.id === editingScore.scoreId
+          ? { ...s, gross_score: updated.gross_score, net_score: updated.net_score, handicap_used: updated.handicap_used }
+          : s
+      ).sort((a, b) => a.gross_score - b.gross_score));
+      setEditingScore(null);
+    }
+    setEditSaving(false);
   }
 
   // ── Team helpers ──────────────────────────────────────────────────────────
@@ -577,12 +642,81 @@ export function ScoreSection({
         {scores.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Scores</p>
+
+            {/* Group scorecard photo — shown if any score came from a group scan */}
+            {savedGroupScanUrl && (
+              <button
+                onClick={() => openLightbox(savedGroupScanPath!)}
+                className="w-full mb-3 rounded-2xl overflow-hidden relative"
+                style={{ border: `0.5px solid ${CARD_BORDER}` }}
+              >
+                <img src={savedGroupScanUrl} alt="Group scorecard" className="w-full max-h-48 object-cover" />
+                <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5"
+                  style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)" }}>
+                  <Camera size={12} style={{ color: GOLD }} />
+                  <span className="text-xs font-medium" style={{ color: GOLD }}>View scorecard</span>
+                </div>
+              </button>
+            )}
+
             <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
               {scores.map((s, i) => {
                 const isLast = i === scores.length - 1;
                 const displayName = s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest";
                 const isMe = s.user_id === userId;
+                const canEdit = isCreator || isMe;
                 const team = s.user_id ? userTeamMap.get(s.user_id) : guestTeam(s);
+                const isEditing = editingScore?.scoreId === s.id;
+
+                if (isEditing) {
+                  return (
+                    <div key={s.id} className="px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                      <p className="text-xs font-medium text-white mb-2">{isMe ? "You" : displayName}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
+                          <input
+                            type="number" min="50" max="180"
+                            value={editingScore.gross}
+                            onChange={e => setEditingScore(prev => prev ? { ...prev, gross: e.target.value } : prev)}
+                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none"
+                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Handicap</p>
+                          <input
+                            type="number" step="0.1" min="0" max="54"
+                            value={editingScore.handicap}
+                            onChange={e => setEditingScore(prev => prev ? { ...prev, handicap: e.target.value } : prev)}
+                            placeholder="—"
+                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none placeholder:text-white/20"
+                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                          />
+                        </div>
+                        <div className="flex gap-1 mt-4">
+                          <button
+                            onClick={handleEditSave}
+                            disabled={editSaving || !editingScore.gross}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold"
+                            style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}
+                          >
+                            {editSaving ? "…" : "Save"}
+                          </button>
+                          <button
+                            onClick={() => setEditingScore(null)}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold"
+                            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={s.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                     <div className="flex-1 min-w-0">
@@ -608,9 +742,23 @@ export function ScoreSection({
                         <p className="text-xs" style={{ color: "#30D158" }}>Net {s.net_score}</p>
                       )}
                     </div>
-                    {s.scorecard_image_url && (
+                    {s.scorecard_image_url && !s.scorecard_image_url.includes("_group") && (
                       <button onClick={() => openLightbox(s.scorecard_image_url!)} className="ml-1 shrink-0">
                         <Camera size={15} className="text-white/30" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditingScore({
+                          scoreId: s.id,
+                          gross: String(s.gross_score),
+                          handicap: s.handicap_used != null ? String(s.handicap_used) : "",
+                          targetUserId: s.user_id,
+                          guestInviteId: s.guest_invite_id,
+                        })}
+                        className="ml-1 shrink-0"
+                      >
+                        <Pencil size={14} className="text-white/25" />
                       </button>
                     )}
                   </div>

@@ -76,6 +76,37 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json(data, { status: 201 });
   }
 
+  const { target_user_id } = body;
+
+  // Creator posting/editing a score on behalf of another member
+  if (target_user_id && target_user_id !== user.id) {
+    const [{ data: tt }, { data: rsvp }] = await Promise.all([
+      svc.from("tee_times").select("created_by").eq("id", teeTimeId).single(),
+      svc.from("rsvps").select("id").eq("tee_time_id", teeTimeId).eq("user_id", target_user_id).maybeSingle(),
+    ]);
+    if (!tt || tt.created_by !== user.id) {
+      return NextResponse.json({ error: "Only the creator can post scores for other members" }, { status: 403 });
+    }
+    if (!rsvp) {
+      return NextResponse.json({ error: "Member is not on this tee time" }, { status: 404 });
+    }
+    const { data, error } = await svc
+      .from("round_scores")
+      .upsert({
+        tee_time_id: teeTimeId,
+        user_id: target_user_id,
+        gross_score: parseInt(gross_score),
+        handicap_used: handicap_used ?? null,
+        scorecard_image_url: scorecard_image_url ?? null,
+        source: source ?? "manual",
+        notes: notes ?? null,
+      }, { onConflict: "tee_time_id,user_id" })
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data, { status: 201 });
+  }
+
   // Standard: post own score — verify RSVP or creator status
   const [{ data: rsvp }, { data: tt }] = await Promise.all([
     svc.from("rsvps").select("id").eq("tee_time_id", teeTimeId).eq("user_id", user.id).maybeSingle(),

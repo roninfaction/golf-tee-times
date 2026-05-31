@@ -1,19 +1,19 @@
 // Scorecard OCR using GPT-4o Vision.
-// Accepts a public or signed URL to a scorecard image.
 
 export type OcrResult = {
   gross_score: number;
   confidence: "high" | "low";
+  hole_scores?: Record<string, number>; // "1" → strokes, "2" → strokes, ...
 };
 
 export type OcrGroupPlayer = {
-  player_name: string; // exact name from the provided list
+  player_name: string;
   gross_score: number;
   confidence: "high" | "low";
+  hole_scores?: Record<string, number>;
 };
 
-// Multi-player scan: reads all player totals from one scorecard photo.
-// playerNames must be the exact display names to use in the response (GPT-4o matches card names to this list).
+// Multi-player scan: reads all player totals (and per-hole if visible) from one scorecard photo.
 export async function extractGroupScores(
   imageUrl: string,
   playerNames: string[]
@@ -29,14 +29,14 @@ export async function extractGroupScores(
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "gpt-4o",
-        max_tokens: 400,
+        max_tokens: 1200,
         messages: [{
           role: "user",
           content: [
             { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
             {
               type: "text",
-              text: `This is a golf scorecard. The players in this group are (use these EXACT names in your response):\n${nameList}\n\nFor each player you can identify on the scorecard, return their 18-hole gross total (total strokes). Match names written on the card to the closest name in the list above and use the EXACT name from the list in your response. Omit any player whose total you cannot read.\n\nReturn ONLY a JSON array with no markdown:\n[{"player_name": "EXACT name from list", "gross_score": <integer>, "confidence": "high" or "low"}]\n\nUse confidence "low" if the total is unclear or you are estimating.`,
+              text: `This is a golf scorecard. The players in this group are (use these EXACT names in your response):\n${nameList}\n\nFor each player you can identify, extract:\n1. Their 18-hole gross total (total strokes)\n2. Their individual hole scores for each hole you can read (holes 1-18)\n\nMatch names written on the card to the closest name in the list and use the EXACT name from the list.\n\nReturn ONLY a JSON array with no markdown:\n[{"player_name": "EXACT name", "gross_score": <integer>, "confidence": "high" or "low", "hole_scores": {"1": 4, "2": 5, ...}}]\n\nRules:\n- Omit any player whose total you cannot read\n- For hole_scores, only include holes where you can clearly read the stroke count\n- Use confidence "low" if the total is unclear or you are estimating\n- gross_score must be the actual total from the card (or sum of holes if total is missing)`,
             },
           ],
         }],
@@ -68,15 +68,15 @@ export async function extractScoreFromScorecard(imageUrl: string): Promise<OcrRe
       },
       body: JSON.stringify({
         model: "gpt-4o",
-        max_tokens: 100,
+        max_tokens: 400,
         messages: [
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: imageUrl, detail: "low" } },
+              { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
               {
                 type: "text",
-                text: 'This is a golf scorecard. Extract the total gross score (final stroke count for the full round). Return ONLY a JSON object with no markdown: {"gross_score": <integer>, "confidence": "high" or "low"}. Use "low" if the scorecard is unclear, partially visible, or you are guessing.',
+                text: `This is a golf scorecard. Extract the player's total gross score and their score for each individual hole.\n\nReturn ONLY a JSON object with no markdown:\n{"gross_score": <integer>, "confidence": "high" or "low", "hole_scores": {"1": 4, "2": 5, ...}}\n\nRules:\n- gross_score is the total strokes for the round\n- For hole_scores, only include holes where you can clearly read the count\n- Use confidence "low" if the scorecard is unclear or you are guessing\n- Omit hole_scores entirely if you cannot read individual holes`,
               },
             ],
           },

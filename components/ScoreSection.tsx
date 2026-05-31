@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, Pencil, ScanLine, X } from "lucide-react";
+import { Camera, Pencil, ScanLine, Trophy, X } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -28,6 +28,7 @@ type Score = {
   net_score: number | null;
   handicap_used: number | null;
   scorecard_image_url: string | null;
+  hole_scores: Record<string, number> | null;
   source: string;
   profile: { id: string; display_name: string; avatar_url: string | null } | null;
   guest_invite: { id: string; accepted_name: string; team_id: string | null } | null;
@@ -38,11 +39,45 @@ type GroupScanPlayer = {
   user_id: string | null;
   guest_invite_id: string | null;
   handicap_index: number | null;
-  gross_score: number | null;   // null = not detected on card
+  gross_score: number | null;
   confidence: "high" | "low" | null;
-  edited_gross: string;         // editable field
-  edited_handicap: string;      // editable handicap (pre-filled from profile)
+  edited_gross: string;
+  edited_handicap: string;
+  hole_scores?: Record<string, number>;
 };
+
+// ── Match play helpers ────────────────────────────────────────────────────────
+function playerLabel(s: Score, userId: string): string {
+  if (s.user_id === userId) return "You";
+  return s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest";
+}
+
+function calcMatchPlay(scores: Score[]): { id: string; name: string; holesWon: number; holesHalved: number }[] | null {
+  const withHoles = scores.filter(s => s.hole_scores && Object.keys(s.hole_scores).length >= 9);
+  if (withHoles.length < 2) return null;
+
+  const wins: Record<string, number> = {};
+  let halvedTotal = 0;
+
+  for (let hole = 1; hole <= 18; hole++) {
+    const holeScores = withHoles
+      .map(s => ({ id: s.id, score: s.hole_scores![String(hole)] ?? null }))
+      .filter(s => s.score !== null);
+    if (holeScores.length < 2) continue;
+
+    const min = Math.min(...holeScores.map(s => s.score!));
+    const winners = holeScores.filter(s => s.score === min);
+    if (winners.length === 1) {
+      wins[winners[0].id] = (wins[winners[0].id] ?? 0) + 1;
+    } else {
+      halvedTotal++;
+    }
+  }
+
+  return withHoles
+    .map(s => ({ id: s.id, name: s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest", holesWon: wins[s.id] ?? 0, holesHalved: halvedTotal }))
+    .sort((a, b) => b.holesWon - a.holesWon);
+}
 
 export function ScoreSection({
   teeTimeId,
@@ -59,7 +94,6 @@ export function ScoreSection({
   rsvps: RsvpWithTeam[];
   guests: GuestEntry[];
 }) {
-  // Personal score state
   const [scores, setScores] = useState<Score[]>([]);
   const [myScore, setMyScore] = useState<Score | null>(null);
   const [grossScore, setGrossScore] = useState("");
@@ -72,30 +106,27 @@ export function ScoreSection({
   const [scorecardPath, setScorecardPath] = useState<string | null>(null);
   const [scorecardPreviewUrl, setScorecardPreviewUrl] = useState<string | null>(null);
 
-  // Guest score state (creator only)
   const [guestScores, setGuestScores] = useState<Record<string, string>>({});
   const [guestSaving, setGuestSaving] = useState<Record<string, boolean>>({});
   const [guestSaved, setGuestSaved] = useState<Record<string, boolean>>({});
 
-  // Group scan state (creator only)
   const [groupStep, setGroupStep] = useState<"idle" | "uploading" | "processing" | "review" | "error">("idle");
   const [groupScanPath, setGroupScanPath] = useState<string | null>(null);
   const [groupScanPreviewUrl, setGroupScanPreviewUrl] = useState<string | null>(null);
   const [groupPlayers, setGroupPlayers] = useState<GroupScanPlayer[]>([]);
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupSaved, setGroupSaved] = useState(false);
+  const [groupSaveError, setGroupSaveError] = useState<string | null>(null);
 
-  // Saved group scan photo (loaded from DB on mount)
   const [savedGroupScanPath, setSavedGroupScanPath] = useState<string | null>(null);
   const [savedGroupScanUrl, setSavedGroupScanUrl] = useState<string | null>(null);
 
-  // Inline score editing
   const [editingScore, setEditingScore] = useState<EditingScore | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
-  // Shared
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const groupFileRef = useRef<HTMLInputElement>(null);
 
@@ -104,6 +135,7 @@ export function ScoreSection({
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("ghin_handicap_index")
@@ -115,41 +147,42 @@ export function ScoreSection({
       const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (res.ok) {
-        const data = await res.json() as Score[];
-        setScores(data);
-        const mine = data.find(s => s.user_id === userId);
-        if (mine) {
-          setMyScore(mine);
-          setGrossScore(String(mine.gross_score));
-          if (mine.handicap_used) setHandicap(String(mine.handicap_used));
-          if (mine.scorecard_image_url) {
-            setScorecardPath(mine.scorecard_image_url);
-            const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(mine.scorecard_image_url.replace("scorecards/", ""), 300);
-            if (signed?.signedUrl) setScorecardPreviewUrl(signed.signedUrl);
-          }
-        }
-        const guestInit: Record<string, string> = {};
-        for (const s of data) {
-          if (s.guest_invite_id) guestInit[s.guest_invite_id] = String(s.gross_score);
-        }
-        if (Object.keys(guestInit).length) setGuestScores(prev => ({ ...guestInit, ...prev }));
+      if (!res.ok) return;
 
-        // Load saved group scan photo if any score references one
-        const groupScore = data.find(s => s.scorecard_image_url?.includes("_group"));
-        if (groupScore?.scorecard_image_url) {
-          setSavedGroupScanPath(groupScore.scorecard_image_url);
-          const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(
-            groupScore.scorecard_image_url.replace("scorecards/", ""), 300
-          );
-          if (signed?.signedUrl) setSavedGroupScanUrl(signed.signedUrl);
+      const data = await res.json() as Score[];
+      setScores(data);
+
+      const mine = data.find(s => s.user_id === userId);
+      if (mine) {
+        setMyScore(mine);
+        setGrossScore(String(mine.gross_score));
+        if (mine.handicap_used) setHandicap(String(mine.handicap_used));
+        if (mine.scorecard_image_url) {
+          setScorecardPath(mine.scorecard_image_url);
+          const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(mine.scorecard_image_url.replace("scorecards/", ""), 300);
+          if (signed?.signedUrl) setScorecardPreviewUrl(signed.signedUrl);
         }
+      }
+
+      const guestInit: Record<string, string> = {};
+      for (const s of data) {
+        if (s.guest_invite_id) guestInit[s.guest_invite_id] = String(s.gross_score);
+      }
+      if (Object.keys(guestInit).length) setGuestScores(prev => ({ ...guestInit, ...prev }));
+
+      const groupScore = data.find(s => s.scorecard_image_url?.includes("_group"));
+      if (groupScore?.scorecard_image_url) {
+        setSavedGroupScanPath(groupScore.scorecard_image_url);
+        const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(
+          groupScore.scorecard_image_url.replace("scorecards/", ""), 300
+        );
+        if (signed?.signedUrl) setSavedGroupScanUrl(signed.signedUrl);
       }
     }
     load();
   }, [teeTimeId, userId]);
 
-  // ── Personal scorecard photo ──────────────────────────────────────────────
+  // ── Personal scorecard ────────────────────────────────────────────────────
   async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -179,11 +212,10 @@ export function ScoreSection({
       });
 
       if (ocrRes.ok) {
-        const { gross_score, confidence } = await ocrRes.json();
+        const { gross_score, confidence, hole_scores } = await ocrRes.json();
         setGrossScore(String(gross_score));
         setOcrConfidence(confidence);
 
-        // Auto-save immediately — user can edit via pencil if wrong
         const saveRes = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -192,6 +224,7 @@ export function ScoreSection({
             handicap_used: handicap ? parseFloat(handicap) : null,
             scorecard_image_url: path,
             source: "photo_ocr",
+            hole_scores: hole_scores ?? null,
           }),
         });
         if (saveRes.ok) {
@@ -285,6 +318,7 @@ export function ScoreSection({
     if (!file) return;
 
     setGroupStep("uploading");
+    setGroupSaveError(null);
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -317,8 +351,7 @@ export function ScoreSection({
   }
 
   function handleEnterManually() {
-    // Build player list from rsvps + guests with empty scores for manual entry
-    const players: GroupScanPlayer[] = [
+    setGroupPlayers([
       ...rsvps.map(r => ({
         display_name: r.display_name,
         user_id: r.user_id,
@@ -339,8 +372,7 @@ export function ScoreSection({
         edited_gross: "",
         edited_handicap: "",
       })),
-    ];
-    setGroupPlayers(players);
+    ]);
     setGroupStep("review");
   }
 
@@ -348,12 +380,13 @@ export function ScoreSection({
     const toSave = groupPlayers.filter(p => p.edited_gross && parseInt(p.edited_gross) >= 50);
     if (!toSave.length) return;
     setGroupSaving(true);
+    setGroupSaveError(null);
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    await Promise.all(toSave.map(p =>
+    const results = await Promise.all(toSave.map(p =>
       fetch(`/api/tee-times/${teeTimeId}/scores`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
@@ -362,23 +395,25 @@ export function ScoreSection({
           handicap_used: p.edited_handicap ? parseFloat(p.edited_handicap) : null,
           source: groupScanPath ? "photo_ocr" : "manual",
           scorecard_image_url: groupScanPath,
+          hole_scores: p.hole_scores ?? null,
           ...(p.guest_invite_id
             ? { guest_invite_id: p.guest_invite_id }
             : p.user_id && p.user_id !== userId
               ? { target_user_id: p.user_id }
               : {}),
         }),
-      })
+      }).then(r => r.ok)
     ));
 
-    // Reload scores
+    const failCount = results.filter(ok => !ok).length;
+
+    // Reload scores from DB
     const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
     if (res.ok) {
       const data = await res.json() as Score[];
       setScores(data);
-      // Show the group scan photo in the Scores section
       if (groupScanPath) {
         setSavedGroupScanPath(groupScanPath);
         setSavedGroupScanUrl(groupScanPreviewUrl);
@@ -386,8 +421,12 @@ export function ScoreSection({
     }
 
     setGroupSaving(false);
-    setGroupSaved(true);
-    setTimeout(() => { setGroupSaved(false); setGroupStep("idle"); }, 2000);
+    if (failCount > 0) {
+      setGroupSaveError(`${failCount} score${failCount > 1 ? "s" : ""} couldn't be saved — check each player has an RSVP`);
+    } else {
+      setGroupSaved(true);
+      setTimeout(() => { setGroupSaved(false); setGroupStep("idle"); }, 2500);
+    }
   }
 
   async function openLightbox(path: string) {
@@ -410,11 +449,8 @@ export function ScoreSection({
       handicap_used: editingScore.handicap ? parseFloat(editingScore.handicap) : null,
       source: "manual",
     };
-    if (editingScore.guestInviteId) {
-      body.guest_invite_id = editingScore.guestInviteId;
-    } else if (editingScore.targetUserId && editingScore.targetUserId !== userId) {
-      body.target_user_id = editingScore.targetUserId;
-    }
+    if (editingScore.guestInviteId) body.guest_invite_id = editingScore.guestInviteId;
+    else if (editingScore.targetUserId && editingScore.targetUserId !== userId) body.target_user_id = editingScore.targetUserId;
 
     const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
       method: "POST",
@@ -454,11 +490,219 @@ export function ScoreSection({
     return { team, memberScores, total };
   }).filter(t => t.memberScores.length > 0).sort((a, b) => a.total - b.total) : [];
 
+  // ── Winner + match play ───────────────────────────────────────────────────
+  const grossWinnerId = scores.length > 0 ? scores[0].id : null; // sorted asc by gross
+  const netScores = scores.filter(s => s.net_score !== null);
+  const netWinnerId = netScores.length > 0
+    ? netScores.sort((a, b) => (a.net_score ?? 0) - (b.net_score ?? 0))[0].id
+    : null;
+  const matchPlay = calcMatchPlay(scores);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <div>
-        {/* Group scan — creator only */}
+
+        {/* ── Results — shown first when scores exist ───────────────────── */}
+        {scores.length > 0 && (
+          <div className="mb-4">
+
+            {/* Match play holes won — only when hole data available */}
+            {matchPlay && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
+                  Match play
+                </p>
+                <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                  {matchPlay.map((p, i) => {
+                    const isFirst = i === 0;
+                    const isLast = i === matchPlay.length - 1;
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                        {isFirst && <Trophy size={14} style={{ color: GOLD, flexShrink: 0 }} />}
+                        {!isFirst && <div style={{ width: 14, flexShrink: 0 }} />}
+                        <p className="text-sm font-medium text-white flex-1">{p.name}</p>
+                        <p className="text-sm font-semibold" style={{ color: isFirst ? GOLD : "rgba(255,255,255,0.5)" }}>
+                          {p.holesWon} hole{p.holesWon !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    );
+                  })}
+                  {matchPlay[0] && (
+                    <div className="px-4 py-2 text-xs" style={{ borderTop: `0.5px solid ${DIVIDER}`, color: "rgba(255,255,255,0.3)" }}>
+                      {matchPlay[0].holesHalved} hole{matchPlay[0].holesHalved !== 1 ? "s" : ""} halved
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Scorecard photo */}
+            {savedGroupScanUrl && (
+              <button
+                onClick={() => openLightbox(savedGroupScanPath!)}
+                className="w-full mb-3 rounded-2xl overflow-hidden relative"
+                style={{ border: `0.5px solid ${CARD_BORDER}` }}
+              >
+                <img src={savedGroupScanUrl} alt="Group scorecard" className="w-full max-h-48 object-cover" />
+                <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5"
+                  style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)" }}>
+                  <Camera size={12} style={{ color: GOLD }} />
+                  <span className="text-xs font-medium" style={{ color: GOLD }}>View scorecard</span>
+                </div>
+              </button>
+            )}
+
+            {/* Scores list */}
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Scores</p>
+            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              {scores.map((s, i) => {
+                const isLast = i === scores.length - 1;
+                const displayName = playerLabel(s, userId);
+                const isMe = s.user_id === userId;
+                const canEdit = isCreator || isMe;
+                const team = s.user_id ? userTeamMap.get(s.user_id) : guestTeam(s);
+                const isGrossWinner = s.id === grossWinnerId && scores.length > 1;
+                const isNetWinner = s.id === netWinnerId && netScores.length > 1 && netWinnerId !== grossWinnerId;
+                const isEditing = editingScore?.scoreId === s.id;
+
+                if (isEditing) {
+                  return (
+                    <div key={s.id} className="px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                      <p className="text-xs font-medium text-white mb-2">{displayName}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
+                          <input
+                            type="number" min="50" max="180"
+                            value={editingScore.gross}
+                            onChange={e => setEditingScore(prev => prev ? { ...prev, gross: e.target.value } : prev)}
+                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none"
+                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                            autoFocus
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Handicap</p>
+                          <input
+                            type="number" step="0.1" min="0" max="54"
+                            value={editingScore.handicap}
+                            onChange={e => setEditingScore(prev => prev ? { ...prev, handicap: e.target.value } : prev)}
+                            placeholder="—"
+                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none placeholder:text-white/20"
+                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                          />
+                        </div>
+                        <div className="flex gap-1 mt-4">
+                          <button
+                            onClick={handleEditSave}
+                            disabled={editSaving || !editingScore.gross}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold"
+                            style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}
+                          >
+                            {editSaving ? "…" : "Save"}
+                          </button>
+                          <button
+                            onClick={() => setEditingScore(null)}
+                            className="px-3 py-2 rounded-xl text-xs font-semibold"
+                            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={s.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-sm font-medium text-white">{displayName}</p>
+                        {s.guest_invite_id && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.35)" }}>guest</span>
+                        )}
+                        {isGrossWinner && (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(201,168,76,0.18)", color: GOLD }}>🏆 gross</span>
+                        )}
+                        {isNetWinner && (
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}>🏆 net</span>
+                        )}
+                        {team && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full" style={{ background: team.color ?? "#fff" }} />
+                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{team.name}</span>
+                          </div>
+                        )}
+                      </div>
+                      {s.handicap_used && (
+                        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>HCP {s.handicap_used}</p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-white">{s.gross_score}</p>
+                      {s.net_score !== null && s.net_score !== s.gross_score && (
+                        <p className="text-xs" style={{ color: "#30D158" }}>Net {s.net_score}</p>
+                      )}
+                    </div>
+                    {s.scorecard_image_url && !s.scorecard_image_url.includes("_group") && (
+                      <button onClick={() => openLightbox(s.scorecard_image_url!)} className="ml-1 shrink-0">
+                        <Camera size={15} className="text-white/30" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditingScore({
+                          scoreId: s.id,
+                          gross: String(s.gross_score),
+                          handicap: s.handicap_used != null ? String(s.handicap_used) : "",
+                          targetUserId: s.user_id,
+                          guestInviteId: s.guest_invite_id,
+                        })}
+                        className="ml-1 shrink-0"
+                      >
+                        <Pencil size={14} className="text-white/25" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Team results */}
+            {teamsWithScores.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Team results</p>
+                <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                  {teamsWithScores.map(({ team, memberScores, total }, i) => {
+                    const isLast = i === teamsWithScores.length - 1;
+                    const isWinner = i === 0 && teamsWithScores.length > 1;
+                    return (
+                      <div key={team.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color ?? "#fff" }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-white">{team.name}</p>
+                            {isWinner && (
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(201,168,76,0.2)", color: GOLD }}>Winner</span>
+                            )}
+                          </div>
+                          <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                            {memberScores.map(s => s.gross_score).join(" + ")} = {total}
+                          </p>
+                        </div>
+                        <p className="text-lg font-bold text-white shrink-0">{total}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Group scan — creator only ─────────────────────────────────── */}
         {isCreator && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2 px-1">
@@ -482,7 +726,7 @@ export function ScoreSection({
                 <div className="text-left">
                   <p className="text-sm font-medium text-white">Scan group scorecard</p>
                   <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    One photo fills everyone&apos;s scores — AI reads names + handicaps
+                    One photo fills everyone&apos;s scores — AI reads names + holes
                   </p>
                 </div>
               </button>
@@ -503,7 +747,7 @@ export function ScoreSection({
                 )}
                 <div className="px-4 pb-2">
                   <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Couldn&apos;t read scorecard</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>AI couldn&apos;t extract scores — enter them manually below</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>AI couldn&apos;t extract scores — enter them manually or try again</p>
                 </div>
                 <div className="flex gap-2 px-4 pb-4">
                   <button
@@ -511,7 +755,7 @@ export function ScoreSection({
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
                     style={{ background: "rgba(48,209,88,0.12)", color: "#30D158" }}
                   >
-                    Enter scores manually
+                    Enter manually
                   </button>
                   <button
                     onClick={() => groupFileRef.current?.click()}
@@ -526,14 +770,12 @@ export function ScoreSection({
 
             {groupStep === "review" && (
               <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-                {/* Thumbnail */}
                 {groupScanPreviewUrl && (
                   <div className="px-4 pt-3 pb-2">
                     <img src={groupScanPreviewUrl} alt="Group scorecard" className="w-full h-28 object-cover rounded-xl" />
                   </div>
                 )}
 
-                {/* Player rows */}
                 {groupPlayers.map((p, i) => {
                   const isLast = i === groupPlayers.length - 1;
                   const net = p.edited_gross && p.edited_handicap
@@ -556,9 +798,7 @@ export function ScoreSection({
                         <div className="flex-1">
                           <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
                           <input
-                            type="number"
-                            min="50"
-                            max="180"
+                            type="number" min="50" max="180"
                             value={p.edited_gross}
                             onChange={e => setGroupPlayers(prev => prev.map((pl, idx) => idx === i ? { ...pl, edited_gross: e.target.value } : pl))}
                             placeholder="—"
@@ -568,13 +808,10 @@ export function ScoreSection({
                         </div>
                         <div className="flex-1">
                           <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-                            Handicap{p.handicap_index != null ? " (from profile)" : ""}
+                            Handicap{p.handicap_index != null ? " (profile)" : ""}
                           </p>
                           <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="54"
+                            type="number" step="0.1" min="0" max="54"
                             value={p.edited_handicap}
                             onChange={e => setGroupPlayers(prev => prev.map((pl, idx) => idx === i ? { ...pl, edited_handicap: e.target.value } : pl))}
                             placeholder="—"
@@ -594,6 +831,9 @@ export function ScoreSection({
                 })}
 
                 <div style={{ borderTop: `0.5px solid ${DIVIDER}` }}>
+                  {groupSaveError && (
+                    <p className="px-4 pt-3 text-xs" style={{ color: "#FF453A" }}>{groupSaveError}</p>
+                  )}
                   <button
                     onClick={handleSaveAll}
                     disabled={groupSaving || groupSaved}
@@ -608,7 +848,7 @@ export function ScoreSection({
           </div>
         )}
 
-        {/* Personal score entry */}
+        {/* ── Personal score entry ──────────────────────────────────────── */}
         <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
           {myScore ? "Your score" : "Post your score"}
         </p>
@@ -616,7 +856,6 @@ export function ScoreSection({
         <form onSubmit={handleSubmit} className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
           <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
-            {/* Camera / photo thumbnail */}
             {scorecardPreviewUrl ? (
               <button type="button" onClick={() => !ocrLoading && openLightbox(scorecardPath!)} className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden">
                 <img src={scorecardPreviewUrl} alt="Scorecard" className="w-full h-full object-cover" />
@@ -645,13 +884,13 @@ export function ScoreSection({
               {ocrConfidence === "high" && (
                 <div>
                   <p className="text-sm font-semibold" style={{ color: "#30D158" }}>Score saved!</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil in the scores below to edit</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil above to edit</p>
                 </div>
               )}
               {ocrConfidence === "low" && (
                 <div>
                   <p className="text-sm font-semibold" style={{ color: "#FF9F0A" }}>Saved — low confidence</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil in the scores below to verify</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Tap the pencil above to verify</p>
                 </div>
               )}
               {ocrConfidence === "failed" && (
@@ -712,7 +951,7 @@ export function ScoreSection({
           </button>
         </form>
 
-        {/* Guest score entry — creator only */}
+        {/* ── Guest score entry — creator only ─────────────────────────── */}
         {isCreator && guests.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Guest scores</p>
@@ -753,166 +992,6 @@ export function ScoreSection({
                     >
                       {guestSaved[guest.id] ? "✓" : guestSaving[guest.id] ? "…" : "Save"}
                     </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* All scores */}
-        {scores.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Scores</p>
-
-            {/* Group scorecard photo — shown if any score came from a group scan */}
-            {savedGroupScanUrl && (
-              <button
-                onClick={() => openLightbox(savedGroupScanPath!)}
-                className="w-full mb-3 rounded-2xl overflow-hidden relative"
-                style={{ border: `0.5px solid ${CARD_BORDER}` }}
-              >
-                <img src={savedGroupScanUrl} alt="Group scorecard" className="w-full max-h-48 object-cover" />
-                <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5"
-                  style={{ background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)" }}>
-                  <Camera size={12} style={{ color: GOLD }} />
-                  <span className="text-xs font-medium" style={{ color: GOLD }}>View scorecard</span>
-                </div>
-              </button>
-            )}
-
-            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-              {scores.map((s, i) => {
-                const isLast = i === scores.length - 1;
-                const displayName = s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest";
-                const isMe = s.user_id === userId;
-                const canEdit = isCreator || isMe;
-                const team = s.user_id ? userTeamMap.get(s.user_id) : guestTeam(s);
-                const isEditing = editingScore?.scoreId === s.id;
-
-                if (isEditing) {
-                  return (
-                    <div key={s.id} className="px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
-                      <p className="text-xs font-medium text-white mb-2">{isMe ? "You" : displayName}</p>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1">
-                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
-                          <input
-                            type="number" min="50" max="180"
-                            value={editingScore.gross}
-                            onChange={e => setEditingScore(prev => prev ? { ...prev, gross: e.target.value } : prev)}
-                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none"
-                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
-                            autoFocus
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Handicap</p>
-                          <input
-                            type="number" step="0.1" min="0" max="54"
-                            value={editingScore.handicap}
-                            onChange={e => setEditingScore(prev => prev ? { ...prev, handicap: e.target.value } : prev)}
-                            placeholder="—"
-                            className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none placeholder:text-white/20"
-                            style={{ border: `0.5px solid ${CARD_BORDER}` }}
-                          />
-                        </div>
-                        <div className="flex gap-1 mt-4">
-                          <button
-                            onClick={handleEditSave}
-                            disabled={editSaving || !editingScore.gross}
-                            className="px-3 py-2 rounded-xl text-xs font-semibold"
-                            style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}
-                          >
-                            {editSaving ? "…" : "Save"}
-                          </button>
-                          <button
-                            onClick={() => setEditingScore(null)}
-                            className="px-3 py-2 rounded-xl text-xs font-semibold"
-                            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={s.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="text-sm font-medium text-white">{isMe ? "You" : displayName}</p>
-                        {s.guest_invite_id && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.35)" }}>guest</span>
-                        )}
-                        {team && (
-                          <div className="flex items-center gap-1">
-                            <div className="w-2 h-2 rounded-full" style={{ background: team.color ?? "#fff" }} />
-                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{team.name}</span>
-                          </div>
-                        )}
-                      </div>
-                      {s.handicap_used && (
-                        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>HCP {s.handicap_used}</p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold text-white">{s.gross_score}</p>
-                      {s.net_score !== null && s.net_score !== s.gross_score && (
-                        <p className="text-xs" style={{ color: "#30D158" }}>Net {s.net_score}</p>
-                      )}
-                    </div>
-                    {s.scorecard_image_url && !s.scorecard_image_url.includes("_group") && (
-                      <button onClick={() => openLightbox(s.scorecard_image_url!)} className="ml-1 shrink-0">
-                        <Camera size={15} className="text-white/30" />
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button
-                        onClick={() => setEditingScore({
-                          scoreId: s.id,
-                          gross: String(s.gross_score),
-                          handicap: s.handicap_used != null ? String(s.handicap_used) : "",
-                          targetUserId: s.user_id,
-                          guestInviteId: s.guest_invite_id,
-                        })}
-                        className="ml-1 shrink-0"
-                      >
-                        <Pencil size={14} className="text-white/25" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Team results */}
-        {teamsWithScores.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Team results</p>
-            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-              {teamsWithScores.map(({ team, memberScores, total }, i) => {
-                const isLast = i === teamsWithScores.length - 1;
-                const isWinner = i === 0 && teamsWithScores.length > 1;
-                return (
-                  <div key={team.id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ background: team.color ?? "#fff" }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-white">{team.name}</p>
-                        {isWinner && (
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(201,168,76,0.2)", color: GOLD }}>Winner</span>
-                        )}
-                      </div>
-                      <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                        {memberScores.map(s => s.gross_score).join(" + ")} = {total}
-                      </p>
-                    </div>
-                    <p className="text-lg font-bold text-white shrink-0">{total}</p>
                   </div>
                 );
               })}

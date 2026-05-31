@@ -84,6 +84,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       handicap_index: player.handicap_index,
       gross_score: match?.gross_score ?? null,
       confidence: match?.confidence ?? null,
+      hole_scores: match?.hole_scores ?? null,
     };
   });
 

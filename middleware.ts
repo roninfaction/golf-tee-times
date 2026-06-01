@@ -53,6 +53,7 @@ export async function middleware(request: NextRequest) {
     "/api/rsvps",                 // uses Bearer token auth, not cookies
     "/api/push",                  // uses Bearer token auth, not cookies
     "/api/guest-invites",         // uses Bearer token auth, not cookies
+    "/share",                     // public shareable results pages
   ];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 

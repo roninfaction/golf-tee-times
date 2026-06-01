@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload } from "lucide-react";
+import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload, Share2, Check } from "lucide-react";
 import { DigitalScorecard, type ScoreCardRow } from "@/components/DigitalScorecard";
 
 const GOLD = "#C9A84C";
@@ -238,6 +238,7 @@ export function ScoreSection({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [lightboxRotation, setLightboxRotation] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
+  const [shareCopied, setShareCopied] = useState(false);
 
   // Pinch-to-zoom refs
   const pinchStartDist = useRef<number | null>(null);
@@ -703,6 +704,23 @@ export function ScoreSection({
   const matchPlay = calcMatchPlay(scores);
   const showIndividualMatchPlay = matchPlay && format !== "best_ball" && format !== "scramble";
 
+  async function handleShare() {
+    const url = `${window.location.origin}/share/${teeTimeId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Fallback for older browsers / non-HTTPS
+      const el = document.createElement("textarea");
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2500);
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
@@ -953,6 +971,25 @@ export function ScoreSection({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Share Results ─────────────────────────────────────────────── */}
+        {showScorecard && (
+          <div className="mb-3 flex justify-end px-1">
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
+              style={{
+                background: shareCopied ? "rgba(48,209,88,0.15)" : "rgba(255,255,255,0.07)",
+                border: `0.5px solid ${shareCopied ? "rgba(48,209,88,0.35)" : "rgba(255,255,255,0.12)"}`,
+                color: shareCopied ? "#30D158" : "rgba(255,255,255,0.6)",
+                transition: "all 0.2s",
+              }}
+            >
+              {shareCopied ? <Check size={12} /> : <Share2 size={12} />}
+              {shareCopied ? "Link copied!" : "Share results"}
+            </button>
           </div>
         )}
 

@@ -34,6 +34,7 @@ export default function ProfilePage() {
 
   // notifState: "unknown" = loading, "registered" = push_subscription saved on server,
   // "needs_enable" = permission not granted yet, "denied" = OS blocked
+  const [stats, setStats] = useState<{ rounds: number; best: number | null; avg: number | null; wins: number } | null>(null);
   const [notifState, setNotifState] = useState<"unknown" | "registered" | "needs_enable" | "denied">("unknown");
   const [notifEnabling, setNotifEnabling] = useState(false);
   const [notifError, setNotifError] = useState("");
@@ -55,6 +56,34 @@ export default function ProfilePage() {
       if (!user) { setLoading(false); return; }
       setEmail(user.email ?? "");
       setUserId(user.id);
+
+      // Fetch round stats: rounds played, best, avg, wins (low-round count)
+      supabase
+        .from("round_scores")
+        .select("id, tee_time_id, gross_score")
+        .eq("user_id", user.id)
+        .then(async ({ data: myRounds }) => {
+          if (!myRounds?.length) { setStats({ rounds: 0, best: null, avg: null, wins: 0 }); return; }
+          const rounds = myRounds.length;
+          const best = Math.min(...myRounds.map(r => r.gross_score));
+          const avg = Math.round(myRounds.reduce((s, r) => s + r.gross_score, 0) / rounds);
+          const teeIds = [...new Set(myRounds.map(r => r.tee_time_id))];
+          const { data: allScores } = await supabase
+            .from("round_scores")
+            .select("tee_time_id, gross_score")
+            .in("tee_time_id", teeIds);
+          const byTee: Record<string, number[]> = {};
+          for (const s of allScores ?? []) {
+            if (!byTee[s.tee_time_id]) byTee[s.tee_time_id] = [];
+            byTee[s.tee_time_id].push(s.gross_score);
+          }
+          let wins = 0;
+          for (const r of myRounds) {
+            const group = byTee[r.tee_time_id] ?? [];
+            if (group.length > 1 && r.gross_score === Math.min(...group)) wins++;
+          }
+          setStats({ rounds, best, avg, wins });
+        });
 
       supabase
         .from("profiles")
@@ -299,6 +328,35 @@ export default function ProfilePage() {
           <p className="text-white font-semibold text-lg">{loading ? "" : (displayName || "Set your name")}</p>
           <p className="text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>{email}</p>
         </div>
+
+        {/* Stats */}
+        {stats !== null && stats.rounds > 0 && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Your stats</p>
+            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+              <div className="grid grid-cols-4" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+                {[
+                  { label: "Rounds", value: stats.rounds },
+                  { label: "Best", value: stats.best ?? "—" },
+                  { label: "Avg", value: stats.avg ?? "—" },
+                  { label: "Low Rounds", value: stats.wins },
+                ].map((s, i, arr) => (
+                  <div
+                    key={s.label}
+                    className="flex flex-col items-center py-4 gap-1"
+                    style={{ borderRight: i < arr.length - 1 ? `0.5px solid ${DIVIDER}` : "none" }}
+                  >
+                    <span className="text-2xl font-black text-white">{s.value}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.3)" }}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="px-4 py-2.5 text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>
+                Low Rounds = times you had the lowest gross score in your group
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Display name */}
         <form onSubmit={saveProfile}>

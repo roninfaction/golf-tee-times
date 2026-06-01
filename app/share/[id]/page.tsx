@@ -1,20 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { Trophy } from "lucide-react";
-import { notFound } from "next/navigation";
 
 const GOLD = "#C9A84C";
-const GREEN = "#30D158";
 
 type Params = { params: Promise<{ id: string }> };
-
-type TeeTimeRow = {
-  id: string;
-  scheduled_at: string;
-  format: string | null;
-  course_name: string | null;
-  group_id: string | null;
-  group: { name: string } | null;
-};
 
 type TeamRow = { id: string; name: string; color: string | null };
 
@@ -35,14 +24,25 @@ export default async function SharePage({ params }: Params) {
   const { id: teeTimeId } = await params;
   const svc = createServiceClient();
 
-  const { data: ttRaw } = await svc
+  // Fetch tee time — use * to avoid any column name mismatch
+  const { data: ttRaw, error: ttError } = await svc
     .from("tee_times")
-    .select("id, scheduled_at, format, course_name, group_id, group:groups(name)")
+    .select("*")
     .eq("id", teeTimeId)
     .single();
 
-  if (!ttRaw) notFound();
-  const tt = ttRaw as unknown as TeeTimeRow;
+  if (ttError || !ttRaw) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0a0f1a", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, gap: 12 }}>
+        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.4)" }}>Results not found</p>
+        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", fontFamily: "monospace" }}>{teeTimeId}</p>
+        {ttError && <p style={{ fontSize: 11, color: "#FF453A", fontFamily: "monospace" }}>{ttError.message}</p>}
+      </div>
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tt = ttRaw as any;
 
   const [{ data: teamsRaw }, { data: scoresRaw }, { data: rsvpsRaw }] = await Promise.all([
     svc.from("teams").select("id, name, color").eq("group_id", tt.group_id ?? ""),
@@ -88,7 +88,6 @@ export default async function SharePage({ params }: Params) {
     return teamId ? teamsMap.get(teamId) : undefined;
   }
 
-  // Compute team totals
   const isBestBall = tt.format === "best_ball";
   const isScramble = tt.format === "scramble";
   const teamTotals: Record<string, number> = {};
@@ -158,7 +157,6 @@ export default async function SharePage({ params }: Params) {
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", margin: 0 }}>
             {dateStr}
             {tt.format ? ` · ${formatLabel[tt.format] ?? tt.format}` : ""}
-            {tt.group?.name ? ` · ${tt.group.name}` : ""}
           </p>
         </div>
       </div>
@@ -225,48 +223,50 @@ export default async function SharePage({ params }: Params) {
         )}
 
         {/* Individual scores */}
-        <div style={{ marginBottom: 20 }}>
-          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: GOLD, textTransform: "uppercase", marginBottom: 8 }}>
-            Scores
-          </p>
-          <div style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(80,200,110,0.16)", borderRadius: 14, overflow: "hidden" }}>
-            {allScores.map((s, i) => {
-              const team = playerTeam(s);
-              return (
-                <div
-                  key={s.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "10px 16px",
-                    borderBottom: i < allScores.length - 1 ? "0.5px solid rgba(80,200,110,0.10)" : "none",
-                  }}
-                >
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.3)", width: 20, flexShrink: 0 }}>
-                    {i + 1}
-                  </span>
-                  <span style={{ flex: 1, fontWeight: 600 }}>{playerName(s)}</span>
-                  {team && (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: team.color ?? "rgba(255,255,255,0.4)",
-                        background: "rgba(255,255,255,0.06)",
-                        borderRadius: 6,
-                        padding: "2px 6px",
-                        marginRight: 10,
-                      }}
-                    >
-                      {team.name}
+        {allScores.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: GOLD, textTransform: "uppercase", marginBottom: 8 }}>
+              Scores
+            </p>
+            <div style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(80,200,110,0.16)", borderRadius: 14, overflow: "hidden" }}>
+              {allScores.map((s, i) => {
+                const team = playerTeam(s);
+                return (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "10px 16px",
+                      borderBottom: i < allScores.length - 1 ? "0.5px solid rgba(80,200,110,0.10)" : "none",
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.3)", width: 20, flexShrink: 0 }}>
+                      {i + 1}
                     </span>
-                  )}
-                  <span style={{ fontWeight: 800, fontSize: 16 }}>{s.gross_score}</span>
-                </div>
-              );
-            })}
+                    <span style={{ flex: 1, fontWeight: 600 }}>{playerName(s)}</span>
+                    {team && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: team.color ?? "rgba(255,255,255,0.4)",
+                          background: "rgba(255,255,255,0.06)",
+                          borderRadius: 6,
+                          padding: "2px 6px",
+                          marginRight: 10,
+                        }}
+                      >
+                        {team.name}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 800, fontSize: 16 }}>{s.gross_score}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Scorecard grid */}
         {hasHoleData && (
@@ -284,68 +284,28 @@ export default async function SharePage({ params }: Params) {
               } as React.CSSProperties}
             >
               <div style={{ minWidth: NAME_W + HOLE_W * 18 + SUB_W * 2 + TOT_W + 20 }}>
-
                 {/* Header */}
-                <div
-                  style={{
-                    display: "flex",
-                    height: 24,
-                    background: "rgba(255,255,255,0.03)",
-                    borderBottom: "0.5px solid rgba(80,200,110,0.10)",
-                    alignItems: "center",
-                  }}
-                >
-                  <div style={{ width: NAME_W, flexShrink: 0, paddingLeft: 10, fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.22)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                    Player
-                  </div>
-                  {FRONT.map(h => (
-                    <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.28)" }}>{h}</div>
-                  ))}
+                <div style={{ display: "flex", height: 24, background: "rgba(255,255,255,0.03)", borderBottom: "0.5px solid rgba(80,200,110,0.10)", alignItems: "center" }}>
+                  <div style={{ width: NAME_W, flexShrink: 0, paddingLeft: 10, fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.22)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Player</div>
+                  {FRONT.map(h => <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.28)" }}>{h}</div>)}
                   <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,0.32)", letterSpacing: "0.06em" }}>OUT</div>
-                  {BACK.map(h => (
-                    <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.28)" }}>{h}</div>
-                  ))}
+                  {BACK.map(h => <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.28)" }}>{h}</div>)}
                   <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 9, fontWeight: 800, color: "rgba(255,255,255,0.32)", letterSpacing: "0.06em" }}>IN</div>
                   <div style={{ width: TOT_W, flexShrink: 0, textAlign: "center", fontSize: 9, fontWeight: 800, color: GOLD, letterSpacing: "0.06em" }}>TOT</div>
                 </div>
-
-                {/* Score rows */}
+                {/* Rows */}
                 {allScores.map((s, i) => {
                   const hs = s.hole_scores;
                   const out = holeSum(hs, FRONT);
                   const inn = holeSum(hs, BACK);
                   return (
-                    <div
-                      key={s.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        height: 36,
-                        borderBottom: i < allScores.length - 1 ? "0.5px solid rgba(80,200,110,0.08)" : "none",
-                      }}
-                    >
-                      <div style={{ width: NAME_W, flexShrink: 0, paddingLeft: 10, paddingRight: 4, fontSize: 12, fontWeight: 600, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                        {playerName(s).split(" ")[0]}
-                      </div>
-                      {FRONT.map(h => (
-                        <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 500, color: hs?.[String(h)] ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.13)" }}>
-                          {hs?.[String(h)] ?? "·"}
-                        </div>
-                      ))}
-                      <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: out > 0 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.13)" }}>
-                        {out > 0 ? out : "—"}
-                      </div>
-                      {BACK.map(h => (
-                        <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 500, color: hs?.[String(h)] ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.13)" }}>
-                          {hs?.[String(h)] ?? "·"}
-                        </div>
-                      ))}
-                      <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: inn > 0 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.13)" }}>
-                        {inn > 0 ? inn : "—"}
-                      </div>
-                      <div style={{ width: TOT_W, flexShrink: 0, textAlign: "center", fontSize: 14, fontWeight: 800, color: "rgba(255,255,255,0.95)" }}>
-                        {s.gross_score}
-                      </div>
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", height: 36, borderBottom: i < allScores.length - 1 ? "0.5px solid rgba(80,200,110,0.08)" : "none" }}>
+                      <div style={{ width: NAME_W, flexShrink: 0, paddingLeft: 10, paddingRight: 4, fontSize: 12, fontWeight: 600, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{playerName(s).split(" ")[0]}</div>
+                      {FRONT.map(h => <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 500, color: hs?.[String(h)] ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.13)" }}>{hs?.[String(h)] ?? "·"}</div>)}
+                      <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: out > 0 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.13)" }}>{out > 0 ? out : "—"}</div>
+                      {BACK.map(h => <div key={h} style={{ width: HOLE_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 500, color: hs?.[String(h)] ? "rgba(255,255,255,0.88)" : "rgba(255,255,255,0.13)" }}>{hs?.[String(h)] ?? "·"}</div>)}
+                      <div style={{ width: SUB_W, flexShrink: 0, textAlign: "center", fontSize: 12, fontWeight: 700, color: inn > 0 ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.13)" }}>{inn > 0 ? inn : "—"}</div>
+                      <div style={{ width: TOT_W, flexShrink: 0, textAlign: "center", fontSize: 14, fontWeight: 800, color: "rgba(255,255,255,0.95)" }}>{s.gross_score}</div>
                     </div>
                   );
                 })}
@@ -361,6 +321,3 @@ export default async function SharePage({ params }: Params) {
     </div>
   );
 }
-
-// Suppress unused import warning — GREEN used in future team-color tinting
-void GREEN;

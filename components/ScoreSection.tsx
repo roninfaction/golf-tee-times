@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload } from "lucide-react";
+import { DigitalScorecard, type ScoreCardRow } from "@/components/DigitalScorecard";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -24,7 +25,6 @@ type EditingScore = {
   handicap: string;
   targetUserId: string | null;
   guestInviteId: string | null;
-  holeScores: Record<string, string>;
 };
 
 type Score = {
@@ -613,18 +613,14 @@ export function ScoreSection({
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    // Build hole_scores from the string map — only include holes with valid numbers
-    const parsedHoleScores: Record<string, number> = {};
-    for (const [hole, val] of Object.entries(editingScore.holeScores)) {
-      const n = parseInt(val);
-      if (!isNaN(n) && n > 0) parsedHoleScores[hole] = n;
-    }
+    // Preserve existing hole_scores — hole editing happens in the digital scorecard
+    const existingHoleScores = scores.find(s => s.id === editingScore.scoreId)?.hole_scores ?? null;
 
     const body: Record<string, unknown> = {
       gross_score: parseInt(editingScore.gross),
       handicap_used: editingScore.handicap ? parseFloat(editingScore.handicap) : null,
       source: "manual",
-      hole_scores: Object.keys(parsedHoleScores).length > 0 ? parsedHoleScores : null,
+      hole_scores: existingHoleScores,
     };
     if (editingScore.guestInviteId) body.guest_invite_id = editingScore.guestInviteId;
     else if (editingScore.targetUserId && editingScore.targetUserId !== userId) body.target_user_id = editingScore.targetUserId;
@@ -674,6 +670,29 @@ export function ScoreSection({
   const bestBallResults = format === "best_ball"
     ? calcBestBallTeams(scores, teams, userTeamMap, guestTeam)
     : null;
+
+  // ── Digital scorecard ─────────────────────────────────────────────────────
+  function handleScorecardSaved(update: { id: string; gross_score: number; hole_scores: Record<string, number> | null }) {
+    setScores(prev =>
+      prev.map(s => s.id === update.id ? { ...s, gross_score: update.gross_score, hole_scores: update.hole_scores } : s)
+        .sort((a, b) => a.gross_score - b.gross_score)
+    );
+  }
+
+  const scorecardRows: ScoreCardRow[] = scores.map(s => ({
+    id: s.id,
+    user_id: s.user_id,
+    guest_invite_id: s.guest_invite_id,
+    display_name: s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest",
+    team_id: s.user_id
+      ? (userTeamMap.get(s.user_id)?.id ?? null)
+      : (s.guest_invite?.team_id ?? guests.find(g => g.id === s.guest_invite_id)?.team_id ?? null),
+    hole_scores: s.hole_scores,
+    gross_score: s.gross_score,
+    handicap_used: s.handicap_used,
+  }));
+
+  const showScorecard = scores.length > 0;
 
   // ── Winner + match play ───────────────────────────────────────────────────
   const grossWinnerId = scores.length > 0 ? scores[0].id : null;
@@ -794,17 +813,9 @@ export function ScoreSection({
                 const isEditing = editingScore?.scoreId === s.id;
 
                 if (isEditing) {
-                  const holeSum = Object.values(editingScore.holeScores)
-                    .map(v => parseInt(v))
-                    .filter(n => !isNaN(n) && n > 0)
-                    .reduce((a, b) => a + b, 0);
-                  const holeCount = Object.values(editingScore.holeScores).filter(v => parseInt(v) > 0).length;
-
                   return (
                     <div key={s.id} className="px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                       <p className="text-xs font-semibold text-white mb-3">{displayName}</p>
-
-                      {/* Gross + Handicap */}
                       <div className="flex items-start gap-2 mb-3">
                         <div className="flex-1">
                           <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
@@ -829,62 +840,11 @@ export function ScoreSection({
                           />
                         </div>
                       </div>
-
-                      {/* Hole scores (9+9 grid) */}
-                      <div className="mb-2">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-[10px] uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.3)" }}>Hole scores</p>
-                          {holeCount >= 9 && (
-                            <button
-                              type="button"
-                              onClick={() => setEditingScore(prev => prev ? { ...prev, gross: String(holeSum) } : prev)}
-                              className="text-[10px] font-semibold"
-                              style={{ color: GOLD }}
-                            >
-                              Use sum ({holeSum})
-                            </button>
-                          )}
-                        </div>
-                        {/* Front 9 */}
-                        <div className="grid grid-cols-9 gap-1 mb-1">
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
-                            <div key={hole} className="text-center">
-                              <p className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>{hole}</p>
-                              <input
-                                type="number" min="1" max="20"
-                                value={editingScore.holeScores[String(hole)] ?? ""}
-                                onChange={e => setEditingScore(prev => prev
-                                  ? { ...prev, holeScores: { ...prev.holeScores, [String(hole)]: e.target.value } }
-                                  : prev)}
-                                placeholder="—"
-                                className="w-full px-0 py-1.5 rounded-lg text-xs text-white text-center bg-transparent outline-none placeholder:text-white/15"
-                                style={{ border: `0.5px solid ${CARD_BORDER}` }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                        {/* Back 9 */}
-                        <div className="grid grid-cols-9 gap-1">
-                          {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
-                            <div key={hole} className="text-center">
-                              <p className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>{hole}</p>
-                              <input
-                                type="number" min="1" max="20"
-                                value={editingScore.holeScores[String(hole)] ?? ""}
-                                onChange={e => setEditingScore(prev => prev
-                                  ? { ...prev, holeScores: { ...prev.holeScores, [String(hole)]: e.target.value } }
-                                  : prev)}
-                                placeholder="—"
-                                className="w-full px-0 py-1.5 rounded-lg text-xs text-white text-center bg-transparent outline-none placeholder:text-white/15"
-                                style={{ border: `0.5px solid ${CARD_BORDER}` }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
+                      <p className="text-[10px] mb-3" style={{ color: "rgba(255,255,255,0.25)" }}>
+                        Edit hole scores in the scorecard below
+                      </p>
                       {/* Save / Cancel */}
-                      <div className="flex gap-2 mt-3">
+                      <div className="flex gap-2">
                         <button
                           onClick={handleEditSave}
                           disabled={editSaving || !editingScore.gross}
@@ -943,21 +903,13 @@ export function ScoreSection({
                     )}
                     {canEdit && (
                       <button
-                        onClick={() => {
-                          const existing = s.hole_scores ?? {};
-                          const holeScores: Record<string, string> = {};
-                          for (let h = 1; h <= 18; h++) {
-                            holeScores[String(h)] = existing[String(h)] != null ? String(existing[String(h)]) : "";
-                          }
-                          setEditingScore({
-                            scoreId: s.id,
-                            gross: String(s.gross_score),
-                            handicap: s.handicap_used != null ? String(s.handicap_used) : "",
-                            targetUserId: s.user_id,
-                            guestInviteId: s.guest_invite_id,
-                            holeScores,
-                          });
-                        }}
+                        onClick={() => setEditingScore({
+                          scoreId: s.id,
+                          gross: String(s.gross_score),
+                          handicap: s.handicap_used != null ? String(s.handicap_used) : "",
+                          targetUserId: s.user_id,
+                          guestInviteId: s.guest_invite_id,
+                        })}
                         className="ml-1 shrink-0"
                       >
                         <Pencil size={14} className="text-white/25" />
@@ -1001,6 +953,21 @@ export function ScoreSection({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Digital scorecard ─────────────────────────────────────────── */}
+        {showScorecard && (
+          <div className="mb-4">
+            <DigitalScorecard
+              teeTimeId={teeTimeId}
+              userId={userId}
+              canEditOthers={isCreator || isGroupAdmin}
+              format={format}
+              teams={teams}
+              scores={scorecardRows}
+              onSaved={handleScorecardSaved}
+            />
           </div>
         )}
 

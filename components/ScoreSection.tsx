@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, Pencil, ScanLine, Trophy, X } from "lucide-react";
+import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -18,7 +18,14 @@ type RsvpWithTeam = {
   handicap_index: number | null;
 };
 type GuestEntry = { id: string; accepted_name: string; team_id: string | null };
-type EditingScore = { scoreId: string; gross: string; handicap: string; targetUserId: string | null; guestInviteId: string | null };
+type EditingScore = {
+  scoreId: string;
+  gross: string;
+  handicap: string;
+  targetUserId: string | null;
+  guestInviteId: string | null;
+  holeScores: Record<string, string>;
+};
 
 type Score = {
   id: string;
@@ -46,7 +53,7 @@ type GroupScanPlayer = {
   hole_scores?: Record<string, number>;
 };
 
-// ── Match play helpers ────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function playerLabel(s: Score, userId: string): string {
   if (s.user_id === userId) return "You";
   return s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest";
@@ -75,14 +82,115 @@ function calcMatchPlay(scores: Score[]): { id: string; name: string; holesWon: n
   }
 
   return withHoles
-    .map(s => ({ id: s.id, name: s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest", holesWon: wins[s.id] ?? 0, holesHalved: halvedTotal }))
+    .map(s => ({
+      id: s.id,
+      name: s.profile?.display_name ?? s.guest_invite?.accepted_name ?? "Guest",
+      holesWon: wins[s.id] ?? 0,
+      holesHalved: halvedTotal,
+    }))
     .sort((a, b) => b.holesWon - a.holesWon);
+}
+
+type BestBallResult = {
+  teamId: string;
+  name: string;
+  color: string | null;
+  bestBallTotal: number | null;
+  holesWon: number;
+  holesHalved: number;
+  memberBreakdown: string;
+};
+
+function calcBestBallTeams(
+  scores: Score[],
+  teams: Team[],
+  userTeamMap: Map<string, Team | undefined>,
+  getGuestTeam: (s: Score) => Team | undefined
+): BestBallResult[] | null {
+  const teamScores: Record<string, Score[]> = {};
+  for (const s of scores) {
+    const team = s.user_id ? userTeamMap.get(s.user_id) : getGuestTeam(s);
+    if (!team) continue;
+    if (!teamScores[team.id]) teamScores[team.id] = [];
+    teamScores[team.id].push(s);
+  }
+
+  const teamIds = Object.keys(teamScores);
+  if (teamIds.length < 1) return null;
+
+  // Per-team best ball score per hole
+  const teamBestPerHole: Record<string, Record<number, number>> = {};
+  let hasHoleData = false;
+
+  for (const teamId of teamIds) {
+    teamBestPerHole[teamId] = {};
+    for (let hole = 1; hole <= 18; hole++) {
+      const vals = teamScores[teamId]
+        .map(s => s.hole_scores?.[String(hole)] ?? null)
+        .filter((v): v is number => v !== null);
+      if (vals.length > 0) {
+        teamBestPerHole[teamId][hole] = Math.min(...vals);
+        hasHoleData = true;
+      }
+    }
+  }
+
+  // Team best-ball totals (sum of best holes)
+  const teamTotals: Record<string, number | null> = {};
+  for (const teamId of teamIds) {
+    const vals = Object.values(teamBestPerHole[teamId]);
+    teamTotals[teamId] = vals.length >= 9 ? vals.reduce((a, b) => a + b, 0) : null;
+  }
+
+  // Team holes won (compare teams hole by hole using best-ball scores)
+  const teamHolesWon: Record<string, number> = {};
+  for (const id of teamIds) teamHolesWon[id] = 0;
+  let halvedTotal = 0;
+
+  if (hasHoleData && teamIds.length >= 2) {
+    for (let hole = 1; hole <= 18; hole++) {
+      const holeData = teamIds
+        .map(id => ({ id, score: teamBestPerHole[id][hole] ?? null }))
+        .filter(t => t.score !== null);
+      if (holeData.length < 2) continue;
+      const min = Math.min(...holeData.map(t => t.score!));
+      const winners = holeData.filter(t => t.score === min);
+      if (winners.length === 1) {
+        teamHolesWon[winners[0].id] = (teamHolesWon[winners[0].id] ?? 0) + 1;
+      } else {
+        halvedTotal++;
+      }
+    }
+  }
+
+  return teams
+    .filter(t => teamScores[t.id])
+    .map(t => {
+      const members = teamScores[t.id] ?? [];
+      const memberGross = members.map(s => s.gross_score).join(" + ");
+      const bbTotal = teamTotals[t.id];
+      return {
+        teamId: t.id,
+        name: t.name,
+        color: t.color,
+        bestBallTotal: bbTotal,
+        holesWon: teamHolesWon[t.id] ?? 0,
+        holesHalved: halvedTotal,
+        memberBreakdown: bbTotal !== null ? `${memberGross} → ${bbTotal}` : memberGross,
+      };
+    })
+    .sort((a, b) => {
+      if (hasHoleData) return b.holesWon - a.holesWon;
+      return (a.bestBallTotal ?? 999) - (b.bestBallTotal ?? 999);
+    });
 }
 
 export function ScoreSection({
   teeTimeId,
   userId,
   isCreator,
+  isGroupAdmin,
+  format,
   teams,
   rsvps,
   guests,
@@ -90,6 +198,8 @@ export function ScoreSection({
   teeTimeId: string;
   userId: string;
   isCreator: boolean;
+  isGroupAdmin: boolean;
+  format: string | null;
   teams: Team[];
   rsvps: RsvpWithTeam[];
   guests: GuestEntry[];
@@ -126,9 +236,17 @@ export function ScoreSection({
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxRotation, setLightboxRotation] = useState(0);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
+
+  // Pinch-to-zoom refs
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartZoom = useRef(1);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const groupFileRef = useRef<HTMLInputElement>(null);
+  const groupGalleryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -247,7 +365,7 @@ export function ScoreSection({
     setOcrLoading(false);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!grossScore) return;
     setSaving(true);
@@ -407,7 +525,6 @@ export function ScoreSection({
 
     const failCount = results.filter(ok => !ok).length;
 
-    // Reload scores from DB
     const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
@@ -434,7 +551,59 @@ export function ScoreSection({
     const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(
       path.replace("scorecards/", ""), 120
     );
-    if (signed?.signedUrl) { setLightboxUrl(signed.signedUrl); setLightboxOpen(true); }
+    if (signed?.signedUrl) {
+      setLightboxUrl(signed.signedUrl);
+      setLightboxRotation(0);
+      setLightboxZoom(1);
+      setLightboxOpen(true);
+    }
+  }
+
+  function closeLightbox() {
+    setLightboxOpen(false);
+    setLightboxRotation(0);
+    setLightboxZoom(1);
+  }
+
+  async function handleLightboxDownload() {
+    if (!lightboxUrl) return;
+    try {
+      const response = await fetch(lightboxUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scorecard.jpg";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(lightboxUrl, "_blank");
+    }
+  }
+
+  function handleLightboxTouchStart(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDist.current = Math.sqrt(dx * dx + dy * dy);
+      pinchStartZoom.current = lightboxZoom;
+    }
+  }
+
+  function handleLightboxTouchMove(e: React.TouchEvent) {
+    if (e.touches.length === 2 && pinchStartDist.current !== null) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const scale = pinchStartZoom.current * (dist / pinchStartDist.current);
+      setLightboxZoom(Math.max(0.5, Math.min(5, scale)));
+    }
+  }
+
+  function handleLightboxTouchEnd() {
+    pinchStartDist.current = null;
   }
 
   async function handleEditSave() {
@@ -444,10 +613,18 @@ export function ScoreSection({
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
+    // Build hole_scores from the string map — only include holes with valid numbers
+    const parsedHoleScores: Record<string, number> = {};
+    for (const [hole, val] of Object.entries(editingScore.holeScores)) {
+      const n = parseInt(val);
+      if (!isNaN(n) && n > 0) parsedHoleScores[hole] = n;
+    }
+
     const body: Record<string, unknown> = {
       gross_score: parseInt(editingScore.gross),
       handicap_used: editingScore.handicap ? parseFloat(editingScore.handicap) : null,
       source: "manual",
+      hole_scores: Object.keys(parsedHoleScores).length > 0 ? parsedHoleScores : null,
     };
     if (editingScore.guestInviteId) body.guest_invite_id = editingScore.guestInviteId;
     else if (editingScore.targetUserId && editingScore.targetUserId !== userId) body.target_user_id = editingScore.targetUserId;
@@ -462,7 +639,7 @@ export function ScoreSection({
       const updated = await res.json() as Score;
       setScores(prev => prev.map(s =>
         s.id === editingScore.scoreId
-          ? { ...s, gross_score: updated.gross_score, net_score: updated.net_score, handicap_used: updated.handicap_used }
+          ? { ...s, gross_score: updated.gross_score, net_score: updated.net_score, handicap_used: updated.handicap_used, hole_scores: updated.hole_scores }
           : s
       ).sort((a, b) => a.gross_score - b.gross_score));
       setEditingScore(null);
@@ -480,23 +657,32 @@ export function ScoreSection({
     return teamId ? teams.find(t => t.id === teamId) : undefined;
   }
 
+  // Format-aware team scores
   const teamsWithScores = teams.length > 0 ? teams.map(team => {
     const memberScores = scores.filter(s => {
       if (s.user_id) return userTeamMap.get(s.user_id)?.id === team.id;
       const gTeamId = s.guest_invite?.team_id ?? guests.find(g => g.id === s.guest_invite_id)?.team_id;
       return gTeamId === team.id;
     });
-    const total = memberScores.reduce((sum, s) => sum + s.gross_score, 0);
+    // Scramble: all players played same ball — use min gross as team score
+    const total = format === "scramble" && memberScores.length > 0
+      ? Math.min(...memberScores.map(s => s.gross_score))
+      : memberScores.reduce((sum, s) => sum + s.gross_score, 0);
     return { team, memberScores, total };
   }).filter(t => t.memberScores.length > 0).sort((a, b) => a.total - b.total) : [];
 
+  const bestBallResults = format === "best_ball"
+    ? calcBestBallTeams(scores, teams, userTeamMap, guestTeam)
+    : null;
+
   // ── Winner + match play ───────────────────────────────────────────────────
-  const grossWinnerId = scores.length > 0 ? scores[0].id : null; // sorted asc by gross
+  const grossWinnerId = scores.length > 0 ? scores[0].id : null;
   const netScores = scores.filter(s => s.net_score !== null);
   const netWinnerId = netScores.length > 0
     ? netScores.sort((a, b) => (a.net_score ?? 0) - (b.net_score ?? 0))[0].id
     : null;
   const matchPlay = calcMatchPlay(scores);
+  const showIndividualMatchPlay = matchPlay && format !== "best_ball" && format !== "scramble";
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -507,8 +693,47 @@ export function ScoreSection({
         {scores.length > 0 && (
           <div className="mb-4">
 
-            {/* Match play holes won — only when hole data available */}
-            {matchPlay && (
+            {/* Best ball team results */}
+            {bestBallResults && bestBallResults.length >= 2 && (
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
+                  Best ball
+                </p>
+                <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                  {bestBallResults.map((t, i) => {
+                    const isFirst = i === 0;
+                    const isLast = i === bestBallResults.length - 1;
+                    return (
+                      <div key={t.teamId} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ background: t.color ?? "#fff" }} />
+                        {isFirst && <Trophy size={14} style={{ color: GOLD, flexShrink: 0 }} />}
+                        {!isFirst && <div style={{ width: 14, flexShrink: 0 }} />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white">{t.name}</p>
+                          <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{t.memberBreakdown}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold" style={{ color: isFirst ? GOLD : "rgba(255,255,255,0.5)" }}>
+                            {t.holesWon} hole{t.holesWon !== 1 ? "s" : ""}
+                          </p>
+                          {t.bestBallTotal !== null && (
+                            <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{t.bestBallTotal} strokes</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {bestBallResults[0] && (
+                    <div className="px-4 py-2 text-xs" style={{ borderTop: `0.5px solid ${DIVIDER}`, color: "rgba(255,255,255,0.3)" }}>
+                      {bestBallResults[0].holesHalved} hole{bestBallResults[0].holesHalved !== 1 ? "s" : ""} halved
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Individual match play — hidden for team formats */}
+            {showIndividualMatchPlay && (
               <div className="mb-3">
                 <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
                   Match play
@@ -560,21 +785,31 @@ export function ScoreSection({
                 const isLast = i === scores.length - 1;
                 const displayName = playerLabel(s, userId);
                 const isMe = s.user_id === userId;
-                const canEdit = isCreator || isMe;
+                const canEditOwn = isMe;
+                const canEditOthers = isCreator || isGroupAdmin;
+                const canEdit = canEditOwn || canEditOthers;
                 const team = s.user_id ? userTeamMap.get(s.user_id) : guestTeam(s);
                 const isGrossWinner = s.id === grossWinnerId && scores.length > 1;
                 const isNetWinner = s.id === netWinnerId && netScores.length > 1 && netWinnerId !== grossWinnerId;
                 const isEditing = editingScore?.scoreId === s.id;
 
                 if (isEditing) {
+                  const holeSum = Object.values(editingScore.holeScores)
+                    .map(v => parseInt(v))
+                    .filter(n => !isNaN(n) && n > 0)
+                    .reduce((a, b) => a + b, 0);
+                  const holeCount = Object.values(editingScore.holeScores).filter(v => parseInt(v) > 0).length;
+
                   return (
                     <div key={s.id} className="px-4 py-3" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
-                      <p className="text-xs font-medium text-white mb-2">{displayName}</p>
-                      <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-white mb-3">{displayName}</p>
+
+                      {/* Gross + Handicap */}
+                      <div className="flex items-start gap-2 mb-3">
                         <div className="flex-1">
                           <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Gross</p>
                           <input
-                            type="number" min="50" max="180"
+                            type="number" min="18" max="180"
                             value={editingScore.gross}
                             onChange={e => setEditingScore(prev => prev ? { ...prev, gross: e.target.value } : prev)}
                             className="w-full px-3 py-2 rounded-xl text-sm text-white text-center bg-transparent outline-none"
@@ -593,23 +828,78 @@ export function ScoreSection({
                             style={{ border: `0.5px solid ${CARD_BORDER}` }}
                           />
                         </div>
-                        <div className="flex gap-1 mt-4">
-                          <button
-                            onClick={handleEditSave}
-                            disabled={editSaving || !editingScore.gross}
-                            className="px-3 py-2 rounded-xl text-xs font-semibold"
-                            style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}
-                          >
-                            {editSaving ? "…" : "Save"}
-                          </button>
-                          <button
-                            onClick={() => setEditingScore(null)}
-                            className="px-3 py-2 rounded-xl text-xs font-semibold"
-                            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
-                          >
-                            Cancel
-                          </button>
+                      </div>
+
+                      {/* Hole scores (9+9 grid) */}
+                      <div className="mb-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[10px] uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.3)" }}>Hole scores</p>
+                          {holeCount >= 9 && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingScore(prev => prev ? { ...prev, gross: String(holeSum) } : prev)}
+                              className="text-[10px] font-semibold"
+                              style={{ color: GOLD }}
+                            >
+                              Use sum ({holeSum})
+                            </button>
+                          )}
                         </div>
+                        {/* Front 9 */}
+                        <div className="grid grid-cols-9 gap-1 mb-1">
+                          {Array.from({ length: 9 }, (_, i) => i + 1).map(hole => (
+                            <div key={hole} className="text-center">
+                              <p className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>{hole}</p>
+                              <input
+                                type="number" min="1" max="20"
+                                value={editingScore.holeScores[String(hole)] ?? ""}
+                                onChange={e => setEditingScore(prev => prev
+                                  ? { ...prev, holeScores: { ...prev.holeScores, [String(hole)]: e.target.value } }
+                                  : prev)}
+                                placeholder="—"
+                                className="w-full px-0 py-1.5 rounded-lg text-xs text-white text-center bg-transparent outline-none placeholder:text-white/15"
+                                style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        {/* Back 9 */}
+                        <div className="grid grid-cols-9 gap-1">
+                          {Array.from({ length: 9 }, (_, i) => i + 10).map(hole => (
+                            <div key={hole} className="text-center">
+                              <p className="text-[9px] mb-0.5" style={{ color: "rgba(255,255,255,0.2)" }}>{hole}</p>
+                              <input
+                                type="number" min="1" max="20"
+                                value={editingScore.holeScores[String(hole)] ?? ""}
+                                onChange={e => setEditingScore(prev => prev
+                                  ? { ...prev, holeScores: { ...prev.holeScores, [String(hole)]: e.target.value } }
+                                  : prev)}
+                                placeholder="—"
+                                className="w-full px-0 py-1.5 rounded-lg text-xs text-white text-center bg-transparent outline-none placeholder:text-white/15"
+                                style={{ border: `0.5px solid ${CARD_BORDER}` }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Save / Cancel */}
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={handleEditSave}
+                          disabled={editSaving || !editingScore.gross}
+                          className="flex-1 px-3 py-2 rounded-xl text-sm font-semibold"
+                          style={{ background: "rgba(48,209,88,0.15)", color: "#30D158" }}
+                        >
+                          {editSaving ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={() => setEditingScore(null)}
+                          className="px-4 py-2 rounded-xl text-sm font-semibold"
+                          style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   );
@@ -653,13 +943,21 @@ export function ScoreSection({
                     )}
                     {canEdit && (
                       <button
-                        onClick={() => setEditingScore({
-                          scoreId: s.id,
-                          gross: String(s.gross_score),
-                          handicap: s.handicap_used != null ? String(s.handicap_used) : "",
-                          targetUserId: s.user_id,
-                          guestInviteId: s.guest_invite_id,
-                        })}
+                        onClick={() => {
+                          const existing = s.hole_scores ?? {};
+                          const holeScores: Record<string, string> = {};
+                          for (let h = 1; h <= 18; h++) {
+                            holeScores[String(h)] = existing[String(h)] != null ? String(existing[String(h)]) : "";
+                          }
+                          setEditingScore({
+                            scoreId: s.id,
+                            gross: String(s.gross_score),
+                            handicap: s.handicap_used != null ? String(s.handicap_used) : "",
+                            targetUserId: s.user_id,
+                            guestInviteId: s.guest_invite_id,
+                            holeScores,
+                          });
+                        }}
                         className="ml-1 shrink-0"
                       >
                         <Pencil size={14} className="text-white/25" />
@@ -670,10 +968,12 @@ export function ScoreSection({
               })}
             </div>
 
-            {/* Team results */}
-            {teamsWithScores.length > 0 && (
+            {/* Team results — stroke / scramble */}
+            {teamsWithScores.length > 0 && format !== "best_ball" && (
               <div className="mt-3">
-                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Team results</p>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
+                  {format === "scramble" ? "Scramble results" : "Team results"}
+                </p>
                 <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
                   {teamsWithScores.map(({ team, memberScores, total }, i) => {
                     const isLast = i === teamsWithScores.length - 1;
@@ -689,7 +989,9 @@ export function ScoreSection({
                             )}
                           </div>
                           <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                            {memberScores.map(s => s.gross_score).join(" + ")} = {total}
+                            {format === "scramble"
+                              ? "Scramble"
+                              : `${memberScores.map(s => s.gross_score).join(" + ")} = ${total}`}
                           </p>
                         </div>
                         <p className="text-lg font-bold text-white shrink-0">{total}</p>
@@ -702,8 +1004,8 @@ export function ScoreSection({
           </div>
         )}
 
-        {/* ── Group scan — creator only ─────────────────────────────────── */}
-        {isCreator && (
+        {/* ── Group scan — creator / group admin only ───────────────────── */}
+        {(isCreator || isGroupAdmin) && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: GOLD }}>Group scorecard</p>
@@ -714,22 +1016,38 @@ export function ScoreSection({
               )}
             </div>
 
+            {/* Hidden file inputs — no capture so user can pick camera OR gallery */}
             <input ref={groupFileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleGroupPhotoSelect} />
+            <input ref={groupGalleryRef} type="file" accept="image/*" className="hidden" onChange={handleGroupPhotoSelect} />
 
             {groupStep === "idle" && (
-              <button
-                onClick={() => groupFileRef.current?.click()}
-                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl"
-                style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}
-              >
-                <ScanLine size={18} style={{ color: GOLD, flexShrink: 0 }} />
-                <div className="text-left">
-                  <p className="text-sm font-medium text-white">Scan group scorecard</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    One photo fills everyone&apos;s scores — AI reads names + holes
-                  </p>
-                </div>
-              </button>
+              <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+                <button
+                  onClick={() => groupFileRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3.5"
+                  style={{ borderBottom: `0.5px solid ${DIVIDER}` }}
+                >
+                  <ScanLine size={18} style={{ color: GOLD, flexShrink: 0 }} />
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-white">Scan group scorecard</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      Take a photo — AI reads names + scores
+                    </p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => groupGalleryRef.current?.click()}
+                  className="w-full flex items-center gap-3 px-4 py-3.5"
+                >
+                  <Upload size={18} style={{ color: "rgba(255,255,255,0.4)", flexShrink: 0 }} />
+                  <div className="text-left">
+                    <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.7)" }}>Upload from photos</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      Choose an existing photo of the scorecard
+                    </p>
+                  </div>
+                </button>
+              </div>
             )}
 
             {(groupStep === "uploading" || groupStep === "processing") && (
@@ -855,7 +1173,11 @@ export function ScoreSection({
 
         <form onSubmit={handleSubmit} className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
           <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+            {/* Camera: take photo */}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
+            {/* Gallery: pick existing photo */}
+            <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+
             {scorecardPreviewUrl ? (
               <button type="button" onClick={() => !ocrLoading && openLightbox(scorecardPath!)} className="relative shrink-0 w-12 h-12 rounded-xl overflow-hidden">
                 <img src={scorecardPreviewUrl} alt="Scorecard" className="w-full h-full object-cover" />
@@ -866,17 +1188,30 @@ export function ScoreSection({
                 )}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading || ocrLoading}
-                className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 relative"
-                style={{ background: "rgba(255,255,255,0.07)", border: `0.5px solid ${CARD_BORDER}` }}
-              >
-                {uploading || ocrLoading
-                  ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <Camera size={20} className="text-white/40" />}
-              </button>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading || ocrLoading}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center relative"
+                  style={{ background: "rgba(255,255,255,0.07)", border: `0.5px solid ${CARD_BORDER}` }}
+                  title="Take photo"
+                >
+                  {uploading || ocrLoading
+                    ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    : <Camera size={20} className="text-white/40" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => galleryRef.current?.click()}
+                  disabled={uploading || ocrLoading}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center relative"
+                  style={{ background: "rgba(255,255,255,0.07)", border: `0.5px solid ${CARD_BORDER}` }}
+                  title="Upload from photos"
+                >
+                  <Upload size={18} className="text-white/30" />
+                </button>
+              </div>
             )}
             <div className="flex-1">
               {uploading && <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>Uploading…</p>}
@@ -900,9 +1235,9 @@ export function ScoreSection({
                 </div>
               )}
               {!uploading && !ocrLoading && !ocrConfidence && (
-                <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  {scorecardPreviewUrl ? "Replace photo" : "Scan your scorecard"}
-                </button>
+                <p className="text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  {scorecardPreviewUrl ? "Tap to view · use camera or upload to replace" : "Scan or upload your scorecard"}
+                </p>
               )}
             </div>
           </div>
@@ -951,8 +1286,8 @@ export function ScoreSection({
           </button>
         </form>
 
-        {/* ── Guest score entry — creator only ─────────────────────────── */}
-        {isCreator && guests.length > 0 && (
+        {/* ── Guest score entry — creator / group admin only ─────────────── */}
+        {(isCreator || isGroupAdmin) && guests.length > 0 && (
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Guest scores</p>
             <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
@@ -1000,13 +1335,81 @@ export function ScoreSection({
         )}
       </div>
 
-      {/* Lightbox */}
+      {/* ── Enhanced lightbox ─────────────────────────────────────────────── */}
       {lightboxOpen && lightboxUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={() => setLightboxOpen(false)}>
-          <button className="absolute top-4 right-4 p-2" onClick={() => setLightboxOpen(false)}>
-            <X size={24} className="text-white" />
-          </button>
-          <img src={lightboxUrl} alt="Scorecard" className="max-w-full max-h-full object-contain p-4" onClick={e => e.stopPropagation()} />
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: "rgba(0,0,0,0.97)" }}
+          onTouchStart={handleLightboxTouchStart}
+          onTouchMove={handleLightboxTouchMove}
+          onTouchEnd={handleLightboxTouchEnd}
+        >
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-4 py-3 shrink-0" style={{ borderBottom: "0.5px solid rgba(255,255,255,0.08)" }}>
+            <button
+              onClick={handleLightboxDownload}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium"
+              style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}
+            >
+              <Download size={15} />
+              Save
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setLightboxRotation(r => (r + 90) % 360)}
+                className="p-2.5 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}
+              >
+                <RotateCw size={17} />
+              </button>
+              <button
+                onClick={() => setLightboxZoom(z => Math.min(z + 0.5, 5))}
+                className="p-2.5 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}
+              >
+                <ZoomIn size={17} />
+              </button>
+              <button
+                onClick={() => setLightboxZoom(z => Math.max(z - 0.5, 0.5))}
+                className="p-2.5 rounded-xl"
+                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)" }}
+              >
+                <ZoomOut size={17} />
+              </button>
+            </div>
+            <button
+              onClick={closeLightbox}
+              className="p-2.5 rounded-xl"
+              style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.7)" }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Image area — scrollable for when zoomed */}
+          <div className="flex-1 overflow-auto flex items-center justify-center p-4" onClick={closeLightbox}>
+            <img
+              src={lightboxUrl}
+              alt="Scorecard"
+              className="object-contain select-none"
+              style={{
+                transform: `rotate(${lightboxRotation}deg) scale(${lightboxZoom})`,
+                transformOrigin: "center center",
+                transition: "transform 0.25s ease",
+                maxWidth: lightboxRotation % 180 !== 0 ? "80vh" : "100%",
+                maxHeight: lightboxRotation % 180 !== 0 ? "80vw" : "80vh",
+              }}
+              onClick={e => e.stopPropagation()}
+              draggable={false}
+            />
+          </div>
+
+          {/* Zoom hint */}
+          {lightboxZoom === 1 && lightboxRotation === 0 && (
+            <p className="text-center text-xs pb-4 shrink-0" style={{ color: "rgba(255,255,255,0.2)" }}>
+              Pinch to zoom · rotate icon to flip landscape
+            </p>
+          )}
         </div>
       )}
     </>

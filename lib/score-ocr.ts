@@ -48,7 +48,8 @@ export async function extractGroupScores(
     const content = data?.choices?.[0]?.message?.content?.trim();
     if (!content) return null;
 
-    const parsed = JSON.parse(content) as OcrGroupPlayer[];
+    const clean = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(clean) as OcrGroupPlayer[];
     return parsed.filter(p => p.gross_score >= 50 && p.gross_score <= 180);
   } catch {
     return null;
@@ -89,7 +90,8 @@ export async function extractScoreFromScorecard(imageUrl: string): Promise<OcrRe
     const content = data?.choices?.[0]?.message?.content?.trim();
     if (!content) return null;
 
-    const parsed = JSON.parse(content) as OcrResult;
+    const clean = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(clean) as OcrResult;
     if (!parsed.gross_score || parsed.gross_score < 50 || parsed.gross_score > 180) return null;
 
     return parsed;

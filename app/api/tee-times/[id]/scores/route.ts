@@ -38,14 +38,17 @@ export async function POST(request: NextRequest, { params }: Params) {
   const svc = createServiceClient();
 
   if (guest_invite_id) {
-    // Creator-only: post score on behalf of a guest
-    const { data: tt } = await svc
-      .from("tee_times")
-      .select("created_by")
-      .eq("id", teeTimeId)
-      .single();
-    if (!tt || tt.created_by !== user.id) {
-      return NextResponse.json({ error: "Only the creator can post scores for guests" }, { status: 403 });
+    // Creator or group admin: post score on behalf of a guest
+    const { data: tt } = await svc.from("tee_times").select("created_by, group_id").eq("id", teeTimeId).single();
+    if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
+    const isCreator = tt.created_by === user.id;
+    let isGroupAdmin = false;
+    if (!isCreator) {
+      const { data: gm } = await svc.from("group_members").select("role").eq("group_id", tt.group_id).eq("user_id", user.id).maybeSingle();
+      isGroupAdmin = gm?.role === "admin";
+    }
+    if (!isCreator && !isGroupAdmin) {
+      return NextResponse.json({ error: "Only the creator or a group admin can post scores for guests" }, { status: 403 });
     }
 
     const { data: invite } = await svc
@@ -78,14 +81,21 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { target_user_id } = body;
 
-  // Creator posting/editing a score on behalf of another member
+  // Creator or group admin posting/editing a score on behalf of another member
   if (target_user_id && target_user_id !== user.id) {
-    const [{ data: tt }, { data: rsvp }] = await Promise.all([
-      svc.from("tee_times").select("created_by").eq("id", teeTimeId).single(),
+    const { data: tt } = await svc.from("tee_times").select("created_by, group_id").eq("id", teeTimeId).single();
+    if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
+
+    const isCreator = tt.created_by === user.id;
+    const [{ data: rsvp }, { data: gm }] = await Promise.all([
       svc.from("rsvps").select("id").eq("tee_time_id", teeTimeId).eq("user_id", target_user_id).maybeSingle(),
+      isCreator
+        ? Promise.resolve({ data: null })
+        : svc.from("group_members").select("role").eq("group_id", tt.group_id).eq("user_id", user.id).maybeSingle(),
     ]);
-    if (!tt || tt.created_by !== user.id) {
-      return NextResponse.json({ error: "Only the creator can post scores for other members" }, { status: 403 });
+    const isGroupAdmin = gm?.role === "admin";
+    if (!isCreator && !isGroupAdmin) {
+      return NextResponse.json({ error: "Only the creator or a group admin can post scores for other members" }, { status: 403 });
     }
     if (!rsvp) {
       return NextResponse.json({ error: "Member is not on this tee time" }, { status: 404 });

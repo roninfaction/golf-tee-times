@@ -95,6 +95,14 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
     .order("tee_datetime", { ascending: true });
   const linkedTimes = (linkedRaw ?? []) as (TeeTime & { rsvps: { status: string }[]; guest_invites: { status: string }[] })[];
 
+  const { data: groupMemberRow } = await svc
+    .from("group_members")
+    .select("role")
+    .eq("group_id", teeTime.group_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isGroupAdmin = groupMemberRow?.role === "admin";
+
   const groupTz = (teeTime as TeeTime & { group?: { timezone?: string } } & { rsvps: (Rsvp & { profile: Profile })[]; guest_invites: GuestInvite[] }).group?.timezone ?? "America/Los_Angeles";
   const isPast = new Date(teeTime.tee_datetime) < new Date();
   // Show scores any time on the day of the tee time or later (not just after the exact start time)
@@ -449,6 +457,8 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             teeTimeId={teeTime.id}
             userId={user.id}
             isCreator={teeTime.created_by === user.id}
+            isGroupAdmin={isGroupAdmin}
+            format={(teeTime as TeeTime & { format?: string | null }).format ?? null}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             teams={(teeTime as any).tee_time_teams ?? []}
             rsvps={teeTime.rsvps.map(r => ({

@@ -55,7 +55,7 @@ export default async function SharePage({ params }: Params) {
   const tt = ttRaw as any;
 
   const [{ data: teamsRaw }, { data: scoresRaw }, { data: rsvpsRaw }, { data: groupRaw }] = await Promise.all([
-    svc.from("teams").select("id, name, color").eq("group_id", tt.group_id ?? ""),
+    svc.from("tee_time_teams").select("id, name, color").eq("tee_time_id", teeTimeId),
     svc.from("round_scores")
       .select("id, user_id, guest_invite_id, gross_score, hole_scores, profile:profiles(display_name), guest_invite:guest_invites(accepted_name, team_id)")
       .eq("tee_time_id", teeTimeId).order("gross_score", { ascending: true }),

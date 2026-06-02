@@ -1,5 +1,6 @@
-import { createServiceClient } from "@/lib/supabase/server";
-import { Trophy } from "lucide-react";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { Trophy, ChevronLeft } from "lucide-react";
+import Link from "next/link";
 
 const GOLD = "#C9A84C";
 const GREEN = "#30D158";
@@ -40,6 +41,10 @@ function holeSum(hs: Record<string, number> | null, holes: number[]): number {
 export default async function SharePage({ params }: Params) {
   const { id: teeTimeId } = await params;
   const svc = createServiceClient();
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
 
   const { data: ttRaw, error: ttError } = await svc
     .from("tee_times").select("*").eq("id", teeTimeId).single();
@@ -168,6 +173,19 @@ export default async function SharePage({ params }: Params) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0f1a", color: "#fff" }}>
+
+      {/* ── Back to app — logged-in users only ──────────────────────────── */}
+      {isLoggedIn && (
+        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(10,15,26,0.92)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderBottom: "0.5px solid rgba(255,255,255,0.07)", padding: "10px 16px" }}>
+          <Link
+            href={`/tee-times/${teeTimeId}`}
+            style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 14, fontWeight: 600, color: "#30D158", textDecoration: "none" }}
+          >
+            <ChevronLeft size={16} strokeWidth={2.5} />
+            View tee time
+          </Link>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{ position: "relative", background: "rgba(201,168,76,0.08)", borderBottom: "0.5px solid rgba(201,168,76,0.2)", overflow: "hidden" }}>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload, Share2, Check } from "lucide-react";
+import { Camera, Pencil, ScanLine, Trophy, X, RotateCw, Download, ZoomIn, ZoomOut, Upload, Share2, Check, ChevronDown, ChevronUp } from "lucide-react";
 import { DigitalScorecard, type ScoreCardRow } from "@/components/DigitalScorecard";
 
 const GOLD = "#C9A84C";
@@ -239,6 +239,8 @@ export function ScoreSection({
   const [lightboxRotation, setLightboxRotation] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
   const [shareCopied, setShareCopied] = useState(false);
+  const [scorecardExpanded, setScorecardExpanded] = useState(false);
+  const [scoreFormExpanded, setScoreFormExpanded] = useState(true);
 
   // Pinch-to-zoom refs
   const pinchStartDist = useRef<number | null>(null);
@@ -276,6 +278,7 @@ export function ScoreSection({
         setMyScore(mine);
         setGrossScore(String(mine.gross_score));
         if (mine.handicap_used) setHandicap(String(mine.handicap_used));
+        setScoreFormExpanded(false);
         if (mine.scorecard_image_url) {
           setScorecardPath(mine.scorecard_image_url);
           const { data: signed } = await supabase.storage.from("scorecards").createSignedUrl(mine.scorecard_image_url.replace("scorecards/", ""), 300);
@@ -350,7 +353,7 @@ export function ScoreSection({
           const newScore = await saveRes.json() as Score;
           setMyScore(newScore);
           setSaved(true);
-          setTimeout(() => setSaved(false), 3000);
+          setTimeout(() => { setSaved(false); setScoreFormExpanded(false); }, 2000);
           setScores(prev => {
             const filtered = prev.filter(s => s.user_id !== userId);
             return [...filtered, { ...newScore, profile: { id: userId, display_name: "You", avatar_url: null }, guest_invite: null }]
@@ -395,7 +398,7 @@ export function ScoreSection({
         return [...filtered, { ...newScore, profile: { id: userId, display_name: "You", avatar_url: null }, guest_invite: null }]
           .sort((a, b) => a.gross_score - b.gross_score);
       });
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => { setSaved(false); setScoreFormExpanded(false); }, 1500);
     }
   }
 
@@ -993,18 +996,31 @@ export function ScoreSection({
           </div>
         )}
 
-        {/* ── Digital scorecard ─────────────────────────────────────────── */}
+        {/* ── Digital scorecard — collapsible ──────────────────────────── */}
         {showScorecard && (
           <div className="mb-4">
-            <DigitalScorecard
-              teeTimeId={teeTimeId}
-              userId={userId}
-              canEditOthers={isCreator || isGroupAdmin}
-              format={format}
-              teams={teams}
-              scores={scorecardRows}
-              onSaved={handleScorecardSaved}
-            />
+            <button
+              onClick={() => setScorecardExpanded(v => !v)}
+              className="w-full flex items-center justify-between mb-2 px-1"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: GOLD }}>
+                Hole-by-hole scorecard
+              </p>
+              {scorecardExpanded
+                ? <ChevronUp size={14} style={{ color: GOLD }} />
+                : <ChevronDown size={14} style={{ color: GOLD }} />}
+            </button>
+            {scorecardExpanded && (
+              <DigitalScorecard
+                teeTimeId={teeTimeId}
+                userId={userId}
+                canEditOthers={isCreator || isGroupAdmin}
+                format={format}
+                teams={teams}
+                scores={scorecardRows}
+                onSaved={handleScorecardSaved}
+              />
+            )}
           </div>
         )}
 
@@ -1171,11 +1187,44 @@ export function ScoreSection({
         )}
 
         {/* ── Personal score entry ──────────────────────────────────────── */}
+        {myScore && !scoreFormExpanded ? (
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Your score</p>
+            <div
+              className="rounded-2xl flex items-center gap-3 px-4 py-3.5"
+              style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-2xl font-bold text-white">{myScore.gross_score}</p>
+                {myScore.net_score !== null && myScore.handicap_used != null && (
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    HCP {myScore.handicap_used} · Net {myScore.net_score}
+                  </p>
+                )}
+              </div>
+              {scorecardPreviewUrl && (
+                <button type="button" onClick={() => openLightbox(scorecardPath!)} className="shrink-0">
+                  <Camera size={16} className="text-white/30" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setScoreFormExpanded(true)}
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full shrink-0"
+                style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+              >
+                <Pencil size={11} />
+                Edit
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
-          {myScore ? "Your score" : "Post your score"}
+          {myScore ? "Update your score" : "Post your score"}
         </p>
 
-        <form onSubmit={handleSubmit} className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+        <form onSubmit={handleSubmit} className="rounded-2xl overflow-hidden mb-4" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
           <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
             {/* Camera: take photo */}
             <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoSelect} />
@@ -1292,7 +1341,7 @@ export function ScoreSection({
 
         {/* ── Guest score entry — creator / group admin only ─────────────── */}
         {(isCreator || isGroupAdmin) && guests.length > 0 && (
-          <div className="mt-4">
+          <div className="mt-0">
             <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Guest scores</p>
             <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
               {guests.map((guest, i) => {
@@ -1336,6 +1385,8 @@ export function ScoreSection({
               })}
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
 

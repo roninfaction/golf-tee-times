@@ -33,6 +33,7 @@ export function BottomNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
+        willChange: "transform",
         background: "rgba(7,21,16,0.94)",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",

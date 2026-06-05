@@ -1099,7 +1099,7 @@ export function ScoreSection({
                   <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
                     {groupErrorMsg && groupErrorMsg !== "Could not read scorecard"
                       ? groupErrorMsg
-                      : "AI couldn’t extract scores — enter them manually or try again"}
+                      : "Couldn’t read the scores from this photo — try a clearer shot or type them in"}
                   </p>
                 </div>
                 <div className="flex gap-2 px-4 pb-4">
@@ -1304,7 +1304,7 @@ export function ScoreSection({
                   <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
                     {ocrError && ocrError !== "Could not read score from image"
                       ? ocrError
-                      : "Enter your score below manually"}
+                      : "Couldn't read the scorecard — type your score in below"}
                   </p>
                 </div>
               )}

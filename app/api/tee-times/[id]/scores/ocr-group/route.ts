@@ -30,10 +30,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq("user_id", user.id).gte("called_at", `${today}T00:00:00.000Z`),
   ]);
   if ((failedCount ?? 0) >= 3) {
-    return NextResponse.json({ error: "Too many failed scans today — enter scores manually" }, { status: 429 });
+    return NextResponse.json({ error: "Couldn't read the scorecard after 3 tries — please type scores in below" }, { status: 429 });
   }
   if ((totalCount ?? 0) >= 20) {
-    return NextResponse.json({ error: "Daily scan limit reached (20 per day)" }, { status: 429 });
+    return NextResponse.json({ error: "You've scanned 20 scorecards today — enter any remaining scores manually" }, { status: 429 });
   }
 
   // Creator only

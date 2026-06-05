@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { parseBody } from "@/lib/parse-body";
-import { cookies } from "next/headers";
 
 // GET /api/groups/me — returns all groups with role, used by client forms for timezone + context
 export async function GET(request: NextRequest) {

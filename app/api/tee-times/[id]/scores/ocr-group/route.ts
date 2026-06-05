@@ -21,6 +21,18 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
+  // Rate limit: 20 OCR calls per user per day
+  const today = new Date().toISOString().slice(0, 10);
+  const { count } = await svc
+    .from("ocr_usage_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("called_at", `${today}T00:00:00.000Z`);
+  if ((count ?? 0) >= 20) {
+    return NextResponse.json({ error: "Daily OCR limit reached (20 per day)" }, { status: 429 });
+  }
+  await svc.from("ocr_usage_log").insert({ user_id: user.id });
+
   // Creator only
   const { data: tt } = await svc.from("tee_times").select("created_by").eq("id", teeTimeId).single();
   if (!tt || tt.created_by !== user.id) return NextResponse.json({ error: "Creator only" }, { status: 403 });

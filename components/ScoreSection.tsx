@@ -374,7 +374,7 @@ export function ScoreSection({
     setOcrLoading(false);
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!grossScore) return;
     setSaving(true);
@@ -720,17 +720,7 @@ export function ScoreSection({
 
   async function handleShare() {
     const url = `${window.location.origin}/share/${teeTimeId}`;
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Fallback for older browsers / non-HTTPS
-      const el = document.createElement("textarea");
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    }
+    await navigator.clipboard.writeText(url).catch(() => {});
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2500);
   }

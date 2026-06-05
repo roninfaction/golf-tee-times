@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 // GET /api/groups — all groups the authenticated user belongs to
 export async function GET(request: NextRequest) {
@@ -27,7 +28,9 @@ export async function POST(request: NextRequest) {
   const { data: { user }, error: authError } = await svc.auth.getUser(token);
   if (authError || !user) return NextResponse.json({ error: authError?.message ?? "No user" }, { status: 401 });
 
-  const { name, org_id } = await request.json();
+  const { body, badRequest } = await parseBody<{ name: string; org_id?: string }>(request);
+  if (badRequest) return badRequest;
+  const { name, org_id } = body;
   if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
   // Ensure profile exists (required for group_members FK)

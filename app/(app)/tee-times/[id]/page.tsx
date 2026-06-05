@@ -13,6 +13,7 @@ import { TeamPlaySection } from "@/components/TeamPlaySection";
 import { DeleteRsvpButton } from "@/components/DeleteRsvpButton";
 import { DeleteGuestInviteButton } from "@/components/DeleteGuestInviteButton";
 import { InviteMemberButton } from "@/components/InviteMemberButton";
+import { ShareToggleButton } from "@/components/ShareToggleButton";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -449,6 +450,15 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
               })}
             </div>
           </div>
+        )}
+
+        {/* Share results — creator only, past/today tee times */}
+        {isTodayOrPast && teeTime.created_by === user.id && (
+          <ShareToggleButton
+            teeTimeId={teeTime.id}
+            initialIsShareable={(teeTime as TeeTime & { is_shareable?: boolean }).is_shareable ?? false}
+            shareUrl={`https://golfpack.app/share/${teeTime.id}`}
+          />
         )}
 
         {/* Score section — day-of or past tee times where user played */}

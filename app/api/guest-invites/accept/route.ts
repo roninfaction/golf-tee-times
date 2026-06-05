@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
+import { parseBody } from "@/lib/parse-body";
 
 export async function POST(request: NextRequest) {
-  const { token, name, email } = await request.json();
+  const { body, badRequest } = await parseBody<{ token: string; name: string; email?: string }>(request);
+  if (badRequest) return badRequest;
+  const { token, name, email } = body;
 
   if (!token || !name?.trim()) {
     return NextResponse.json({ error: "token and name required" }, { status: 400 });

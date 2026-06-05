@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/admin-guard";
+import { parseBody } from "@/lib/parse-body";
 
 export async function GET(request: NextRequest) {
   const { error } = await requireSuperAdmin(request);
@@ -31,7 +32,9 @@ export async function PATCH(request: NextRequest) {
   const { user, error } = await requireSuperAdmin(request);
   if (error) return error;
 
-  const { user_id, is_super_admin } = await request.json();
+  const { body, badRequest } = await parseBody<{ user_id: string; is_super_admin: boolean }>(request);
+  if (badRequest) return badRequest;
+  const { user_id, is_super_admin } = body;
   if (!user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 });
 
   // Prevent self-demotion

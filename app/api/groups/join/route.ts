@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { groupId } = await request.json();
+  const { body, badRequest } = await parseBody<{ groupId: string }>(request);
+  if (badRequest) return badRequest;
+  const { groupId } = body;
   if (!groupId) return NextResponse.json({ error: "groupId required" }, { status: 400 });
 
   const svc = createServiceClient();

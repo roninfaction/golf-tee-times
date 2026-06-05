@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { extractScoreFromScorecard } from "@/lib/score-ocr";
+import { parseBody } from "@/lib/parse-body";
 
 // POST /api/scores/ocr — accepts a Supabase Storage path, generates a signed URL, runs OCR
 export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { storage_path } = await request.json();
+  const { body, badRequest } = await parseBody<{ storage_path: string }>(request);
+  if (badRequest) return badRequest;
+  const { storage_path } = body;
   if (!storage_path) return NextResponse.json({ error: "storage_path required" }, { status: 400 });
 
   const svc = createServiceClient();

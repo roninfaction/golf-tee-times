@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -10,7 +11,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: orgId } = await params;
-  const { name, timezone } = await request.json();
+  const { body, badRequest } = await parseBody<{ name: string; timezone?: string }>(request);
+  if (badRequest) return badRequest;
+  const { name, timezone } = body;
   if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
   const svc = createServiceClient();

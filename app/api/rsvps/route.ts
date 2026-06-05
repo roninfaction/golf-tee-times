@@ -4,12 +4,15 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
+import { parseBody } from "@/lib/parse-body";
 
 export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { teeTimeId, status } = await request.json();
+  const { body: postBody, badRequest: postBad } = await parseBody<{ teeTimeId: string; status: string }>(request);
+  if (postBad) return postBad;
+  const { teeTimeId, status } = postBody;
   if (!teeTimeId || !status) {
     return NextResponse.json({ error: "teeTimeId and status required" }, { status: 400 });
   }
@@ -68,16 +71,19 @@ export async function DELETE(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { rsvpId } = await request.json();
+  const { body: delBody, badRequest: delBad } = await parseBody<{ rsvpId: string }>(request);
+  if (delBad) return delBad;
+  const { rsvpId } = delBody;
   if (!rsvpId) return NextResponse.json({ error: "rsvpId required" }, { status: 400 });
 
   const svc = createServiceClient();
 
-  const { data: rsvp } = await svc.from("rsvps").select("tee_time_id").eq("id", rsvpId).single();
+  const { data: rsvp } = await svc.from("rsvps").select("tee_time_id, user_id").eq("id", rsvpId).single();
   if (!rsvp) return NextResponse.json({ error: "RSVP not found" }, { status: 404 });
 
   const { data: teeTime } = await svc.from("tee_times").select("created_by, group_id").eq("id", rsvp.tee_time_id).single();
-  if (!teeTime || teeTime.created_by !== user.id) {
+  // Allow: caller owns the RSVP (removing themselves) OR caller created the tee time
+  if (!teeTime || (rsvp.user_id !== user.id && teeTime.created_by !== user.id)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

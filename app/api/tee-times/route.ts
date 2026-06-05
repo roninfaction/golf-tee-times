@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 export async function GET(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
@@ -52,7 +53,9 @@ export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { body, badRequest } = await parseBody<any>(request);
+  if (badRequest) return badRequest;
   const { course_name, course_place_id, course_details, tee_datetime, holes, max_players, notes, confirmation_number, source, group_id, parent_tee_time_id, slot_order } = body;
 
   if (!course_name || !tee_datetime) {

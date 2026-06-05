@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,7 +35,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: orgId } = await params;
-  const body = await request.json();
+  const { body, badRequest } = await parseBody<Record<string, unknown>>(request);
+  if (badRequest) return badRequest;
   const svc = createServiceClient();
 
   const { data: membership } = await svc

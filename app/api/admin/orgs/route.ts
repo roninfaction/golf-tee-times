@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireSuperAdmin } from "@/lib/admin-guard";
+import { parseBody } from "@/lib/parse-body";
 
 export async function GET(request: NextRequest) {
   const { error } = await requireSuperAdmin(request);
@@ -39,7 +40,9 @@ export async function PATCH(request: NextRequest) {
   const { error } = await requireSuperAdmin(request);
   if (error) return error;
 
-  const { org_id, billing_status } = await request.json();
+  const { body, badRequest } = await parseBody<{ org_id: string; billing_status: string }>(request);
+  if (badRequest) return badRequest;
+  const { org_id, billing_status } = body;
   if (!org_id || !billing_status) return NextResponse.json({ error: "org_id and billing_status required" }, { status: 400 });
 
   const svc = createServiceClient();

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-import { Copy, Check, LogOut, ChevronRight, Bell, BellOff } from "lucide-react";
+import { Copy, Check, LogOut, ChevronRight, Bell, BellOff, Bug } from "lucide-react";
 import { AvatarUpload } from "@/components/AvatarUpload";
+import { BugReportModal } from "@/components/BugReportModal";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -42,6 +43,7 @@ export default function ProfilePage() {
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState("");
   const [isStandalone, setIsStandalone] = useState(true);
+  const [showBugReport, setShowBugReport] = useState(false);
 
   const forwardingEmail = forwarderToken ? `tee-${forwarderToken}@${EMAIL_FORWARD_DOMAIN}` : "";
 
@@ -541,6 +543,19 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {/* Report a Bug */}
+        <button
+          onClick={() => setShowBugReport(true)}
+          className="w-full flex items-center justify-between rounded-2xl px-4 py-3.5 text-sm font-medium"
+          style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}`, color: "rgba(255,255,255,0.6)" }}
+        >
+          <span className="flex items-center gap-2">
+            <Bug size={16} style={{ color: "#FF9F0A" }} />
+            Report a Bug
+          </span>
+          <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.2)" }} />
+        </button>
+
         {/* Sign out */}
         <button
           onClick={signOut}
@@ -553,6 +568,8 @@ export default function ProfilePage() {
           </span>
         </button>
       </div>
+
+      {showBugReport && <BugReportModal onClose={() => setShowBugReport(false)} />}
     </div>
   );
 }

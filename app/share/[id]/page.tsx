@@ -57,6 +57,15 @@ export default async function SharePage({ params }: Params) {
       </div>
     );
   }
+
+  // Require the creator to have explicitly enabled sharing
+  if (!ttRaw.is_shareable) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0a0f1a", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, gap: 8 }}>
+        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.4)" }}>These results are not shared publicly.</p>
+      </div>
+    );
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tt = ttRaw as any;
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -40,8 +41,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (existing.created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await request.json();
-  const { course_name, course_place_id, course_details, tee_datetime, holes, max_players, notes, confirmation_number } = body;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { body, badRequest } = await parseBody<any>(request);
+  if (badRequest) return badRequest;
+  const { course_name, course_place_id, course_details, tee_datetime, holes, max_players, notes, confirmation_number, is_shareable } = body;
 
   // Upsert course record if details provided
   if (course_place_id && course_details) {
@@ -66,6 +69,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (max_players !== undefined) updates.max_players = max_players;
   if (notes !== undefined) updates.notes = notes;
   if (confirmation_number !== undefined) updates.confirmation_number = confirmation_number;
+  if (is_shareable !== undefined) updates.is_shareable = Boolean(is_shareable);
 
   const { data, error } = await svc
     .from("tee_times")

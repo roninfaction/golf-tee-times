@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string; userId: string }> };
 
@@ -10,7 +11,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: orgId, userId } = await params;
-  const { role } = await request.json();
+  const { body, badRequest } = await parseBody<{ role: string }>(request);
+  if (badRequest) return badRequest;
+  const { role } = body;
 
   if (!["admin", "member"].includes(role)) {
     return NextResponse.json({ error: "role must be admin or member" }, { status: 400 });

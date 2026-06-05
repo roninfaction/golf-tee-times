@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,7 +12,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: teeTimeId } = await params;
-  const { memberId } = await request.json();
+  const { body, badRequest } = await parseBody<{ memberId: string }>(request);
+  if (badRequest) return badRequest;
+  const { memberId } = body;
   if (!memberId) return NextResponse.json({ error: "memberId required" }, { status: 400 });
 
   const svc = createServiceClient();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 import { cookies } from "next/headers";
 
 // GET /api/groups/me — returns all groups with role, used by client forms for timezone + context
@@ -42,7 +43,8 @@ export async function PATCH(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await request.json();
+  const { body, badRequest } = await parseBody<Record<string, unknown>>(request);
+  if (badRequest) return badRequest;
   const allowed = ["active_group_id", "forwarding_group_id"];
   const updates = Object.fromEntries(
     Object.entries(body).filter(([k]) => allowed.includes(k))

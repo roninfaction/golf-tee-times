@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,7 +29,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: teeTimeId } = await params;
-  const body = await request.json();
+  const { body, badRequest } = await parseBody<{ teams: { name: string; color?: string }[]; format: string }>(request);
+  if (badRequest) return badRequest;
   const { teams, format } = body as {
     teams: { name: string; color?: string }[];
     format: string;
@@ -68,9 +70,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: teeTimeId } = await params;
-  const { assignments } = await request.json() as {
-    assignments: { rsvp_id: string; team_id: string | null; type?: "rsvp" | "guest" }[];
-  };
+  const { body: patchBody, badRequest: patchBad } = await parseBody<{ assignments: { rsvp_id: string; team_id: string | null; type?: "rsvp" | "guest" }[] }>(request);
+  if (patchBad) return patchBad;
+  const { assignments } = patchBody;
 
   if (!assignments?.length) return NextResponse.json({ error: "assignments required" }, { status: 400 });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
+import { parseBody } from "@/lib/parse-body";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app";
 
@@ -61,14 +62,26 @@ export async function POST(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { teeTimeId, inviteeName } = await request.json();
+  let body: { teeTimeId?: string; inviteeName?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const { teeTimeId, inviteeName } = body;
   if (!teeTimeId) return NextResponse.json({ error: "teeTimeId required" }, { status: 400 });
+
+  const trimmedName = inviteeName?.trim().slice(0, 100) ?? null;
+  if (inviteeName !== undefined && !trimmedName) {
+    return NextResponse.json({ error: "inviteeName cannot be empty" }, { status: 400 });
+  }
 
   const svc = createServiceClient();
 
   const { data: teeTime } = await svc
     .from("tee_times")
-    .select("id, group_id, max_players, course_name")
+    .select("id, group_id, course_name")
     .eq("id", teeTimeId)
     .single();
 
@@ -86,46 +99,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Check open spots
-  const { count: acceptedGroup } = await svc
-    .from("rsvps")
-    .select("*", { count: "exact", head: true })
-    .eq("tee_time_id", teeTimeId)
-    .eq("status", "accepted");
-
-  const { count: acceptedGuests } = await svc
-    .from("guest_invites")
-    .select("*", { count: "exact", head: true })
-    .eq("tee_time_id", teeTimeId)
-    .eq("status", "accepted");
-
-  const openSpots = teeTime.max_players - (acceptedGroup ?? 0) - (acceptedGuests ?? 0);
-  if (openSpots <= 0) {
-    return NextResponse.json({ error: "No open spots" }, { status: 400 });
-  }
-
-  // Create the invite
-  const { data: invite, error } = await svc
-    .from("guest_invites")
-    .insert({
-      tee_time_id: teeTimeId,
-      invited_by: user.id,
-      invitee_name: inviteeName ?? null,
-    })
-    .select()
-    .single();
+  // Atomically check spots and insert invite in a single DB transaction
+  const { data: rows, error } = await svc.rpc("check_and_create_guest_invite", {
+    p_tee_time_id: teeTimeId,
+    p_invited_by: user.id,
+    p_invitee_name: trimmedName,
+  });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const url = `${APP_URL}/fill/${invite.token}`;
-  return NextResponse.json({ ok: true, token: invite.token, url }, { status: 201 });
+  const result = rows?.[0];
+  if (result?.err === "no_spots") return NextResponse.json({ error: "No open spots" }, { status: 400 });
+  if (result?.err === "not_found" || !result?.invite_token) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const url = `${APP_URL}/fill/${result.invite_token}`;
+  return NextResponse.json({ ok: true, token: result.invite_token, url }, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { guestInviteId } = await request.json();
+  const { body: deleteBody, badRequest: deleteBad } = await parseBody<{ guestInviteId: string }>(request);
+  if (deleteBad) return deleteBad;
+  const { guestInviteId } = deleteBody;
   if (!guestInviteId) return NextResponse.json({ error: "guestInviteId required" }, { status: 400 });
 
   const svc = createServiceClient();

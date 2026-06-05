@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Building2, Calendar, BarChart3 } from "lucide-react";
+import { Users, Building2, Calendar, BarChart3, Bug } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -31,6 +31,7 @@ export default async function AdminDashboard() {
     { count: totalTeeTimes },
     { count: recentUsers },
     { count: recentTeeTimes },
+    { count: openBugReports },
   ] = await Promise.all([
     svc.from("profiles").select("id", { count: "exact", head: true }),
     svc.from("organizations").select("id", { count: "exact", head: true }),
@@ -38,6 +39,7 @@ export default async function AdminDashboard() {
     svc.from("tee_times").select("id", { count: "exact", head: true }),
     svc.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     svc.from("tee_times").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
+    svc.from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
   ]);
   const stats = {
     total_users: totalUsers ?? 0,
@@ -80,8 +82,9 @@ export default async function AdminDashboard() {
           <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Manage</p>
           <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
             {[
-              { href: "/admin/orgs", label: "Organizations", desc: "View all clubs, manage billing status" },
-              { href: "/admin/users", label: "Users", desc: "Search users, manage admin access" },
+              { href: "/admin/orgs", label: "Organizations", desc: "View all clubs, manage billing status", badge: null },
+              { href: "/admin/users", label: "Users", desc: "Search users, manage admin access", badge: null },
+              { href: "/admin/bug-reports", label: "Bug Reports", desc: "User-submitted issues and screenshots", badge: openBugReports ?? 0 },
             ].map((item, i, arr) => (
               <Link
                 key={item.href}
@@ -89,11 +92,21 @@ export default async function AdminDashboard() {
                 className="flex items-center justify-between px-4 py-4 transition-opacity active:opacity-70"
                 style={{ borderBottom: i < arr.length - 1 ? `0.5px solid ${DIVIDER}` : "none" }}
               >
-                <div>
-                  <p className="text-sm font-medium text-white">{item.label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{item.desc}</p>
+                <div className="flex items-center gap-3">
+                  {item.href === "/admin/bug-reports" && <Bug size={16} style={{ color: "#FF9F0A", flexShrink: 0 }} />}
+                  <div>
+                    <p className="text-sm font-medium text-white">{item.label}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{item.desc}</p>
+                  </div>
                 </div>
-                <span className="text-white/20">›</span>
+                <div className="flex items-center gap-2">
+                  {(item.badge ?? 0) > 0 && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,69,58,0.2)", color: "#FF453A" }}>
+                      {item.badge}
+                    </span>
+                  )}
+                  <span className="text-white/20">›</span>
+                </div>
               </Link>
             ))}
           </div>

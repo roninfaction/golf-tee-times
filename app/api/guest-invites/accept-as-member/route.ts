@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { sendPush } from "@/lib/onesignal";
 import { clearExpiredPushSubscriptions } from "@/lib/push-cleanup";
+import { parseBody } from "@/lib/parse-body";
 
 export async function POST(request: NextRequest) {
   // Try cookie auth first; fall back to Bearer token (handles iOS PWA where cookies
@@ -13,7 +14,9 @@ export async function POST(request: NextRequest) {
   const user = cookieUser ?? await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { token } = await request.json();
+  const { body, badRequest } = await parseBody<{ token: string }>(request);
+  if (badRequest) return badRequest;
+  const { token } = body;
   if (!token) return NextResponse.json({ error: "token required" }, { status: 400 });
 
   const svc = createServiceClient();

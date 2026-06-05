@@ -21,17 +21,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
-  // Rate limit: 20 OCR calls per user per day
+  // Rate limits: 3 failed scans/day blocks further attempts; 20 total/day hard cap
   const today = new Date().toISOString().slice(0, 10);
-  const { count } = await svc
-    .from("ocr_usage_log")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("called_at", `${today}T00:00:00.000Z`);
-  if ((count ?? 0) >= 20) {
-    return NextResponse.json({ error: "Daily OCR limit reached (20 per day)" }, { status: 429 });
+  const [{ count: failedCount }, { count: totalCount }] = await Promise.all([
+    svc.from("ocr_usage_log").select("id", { count: "exact", head: true })
+      .eq("user_id", user.id).eq("success", false).gte("called_at", `${today}T00:00:00.000Z`),
+    svc.from("ocr_usage_log").select("id", { count: "exact", head: true })
+      .eq("user_id", user.id).gte("called_at", `${today}T00:00:00.000Z`),
+  ]);
+  if ((failedCount ?? 0) >= 3) {
+    return NextResponse.json({ error: "Too many failed scans today — enter scores manually" }, { status: 429 });
   }
-  await svc.from("ocr_usage_log").insert({ user_id: user.id });
+  if ((totalCount ?? 0) >= 20) {
+    return NextResponse.json({ error: "Daily scan limit reached (20 per day)" }, { status: 429 });
+  }
 
   // Creator only
   const { data: tt } = await svc.from("tee_times").select("created_by").eq("id", teeTimeId).single();
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const playerNames = allPlayers.map(p => p.display_name);
   const ocrResults = await extractGroupScores(signed.signedUrl, playerNames);
+  await svc.from("ocr_usage_log").insert({ user_id: user.id, success: ocrResults !== null });
   if (!ocrResults) return NextResponse.json({ error: "Could not read scorecard" }, { status: 422 });
 
   // Merge OCR results with full player list:

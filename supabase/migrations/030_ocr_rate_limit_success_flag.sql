@@ -1,0 +1,1 @@
+ALTER TABLE ocr_usage_log ADD COLUMN success BOOLEAN NOT NULL DEFAULT false;

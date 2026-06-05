@@ -213,6 +213,7 @@ export function ScoreSection({
   const [saved, setSaved] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrConfidence, setOcrConfidence] = useState<"high" | "low" | "failed" | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const [scorecardPath, setScorecardPath] = useState<string | null>(null);
   const [scorecardPreviewUrl, setScorecardPreviewUrl] = useState<string | null>(null);
 
@@ -227,6 +228,7 @@ export function ScoreSection({
   const [groupSaving, setGroupSaving] = useState(false);
   const [groupSaved, setGroupSaved] = useState(false);
   const [groupSaveError, setGroupSaveError] = useState<string | null>(null);
+  const [groupErrorMsg, setGroupErrorMsg] = useState<string | null>(null);
 
   const [savedGroupScanPath, setSavedGroupScanPath] = useState<string | null>(null);
   const [savedGroupScanUrl, setSavedGroupScanUrl] = useState<string | null>(null);
@@ -310,6 +312,7 @@ export function ScoreSection({
     if (!file) return;
     setUploading(true);
     setOcrConfidence(null);
+    setOcrError(null);
 
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -361,6 +364,8 @@ export function ScoreSection({
           });
         }
       } else {
+        const errBody = await ocrRes.json().catch(() => ({}));
+        setOcrError(errBody.error ?? null);
         setOcrConfidence("failed");
       }
     } catch {
@@ -441,6 +446,7 @@ export function ScoreSection({
 
     setGroupStep("uploading");
     setGroupSaveError(null);
+    setGroupErrorMsg(null);
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
@@ -461,7 +467,12 @@ export function ScoreSection({
       body: JSON.stringify({ storage_path: path }),
     });
 
-    if (!res.ok) { setGroupStep("error"); return; }
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      setGroupErrorMsg(errBody.error ?? null);
+      setGroupStep("error");
+      return;
+    }
     const { players } = await res.json() as { players: Omit<GroupScanPlayer, "edited_gross" | "edited_handicap">[] };
 
     setGroupPlayers(players.map(p => ({
@@ -1085,7 +1096,11 @@ export function ScoreSection({
                 )}
                 <div className="px-4 pb-2">
                   <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Couldn&apos;t read scorecard</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>AI couldn&apos;t extract scores — enter them manually or try again</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                    {groupErrorMsg && groupErrorMsg !== "Could not read scorecard"
+                      ? groupErrorMsg
+                      : "AI couldn’t extract scores — enter them manually or try again"}
+                  </p>
                 </div>
                 <div className="flex gap-2 px-4 pb-4">
                   <button
@@ -1095,13 +1110,15 @@ export function ScoreSection({
                   >
                     Enter manually
                   </button>
-                  <button
-                    onClick={() => groupFileRef.current?.click()}
-                    className="py-2.5 px-4 rounded-xl text-sm font-semibold"
-                    style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}
-                  >
-                    Try again
-                  </button>
+                  {(!groupErrorMsg || groupErrorMsg === "Could not read scorecard") && (
+                    <button
+                      onClick={() => groupFileRef.current?.click()}
+                      className="py-2.5 px-4 rounded-xl text-sm font-semibold"
+                      style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}
+                    >
+                      Try again
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1284,7 +1301,11 @@ export function ScoreSection({
               {ocrConfidence === "failed" && (
                 <div>
                   <p className="text-sm font-semibold" style={{ color: "#FF453A" }}>Couldn&apos;t read scorecard</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Enter your score below manually</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>
+                    {ocrError && ocrError !== "Could not read score from image"
+                      ? ocrError
+                      : "Enter your score below manually"}
+                  </p>
                 </div>
               )}
               {!uploading && !ocrLoading && !ocrConfidence && (

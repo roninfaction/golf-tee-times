@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/browser";
 
 const CARD_BG = "rgba(255,255,255,0.055)";
 const CARD_BORDER = "rgba(80,200,110,0.16)";
-const DIVIDER = "rgba(80,200,110,0.10)";
 
 interface Props {
   onClose: () => void;
@@ -37,7 +36,7 @@ export function BugReportModal({ onClose }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!title.trim()) { setError("Please add a title."); return; }
     setSubmitting(true);
@@ -101,8 +100,8 @@ export function BugReportModal({ onClose }: Props) {
 
       {/* Sheet */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl px-4 pt-5 pb-10"
-        style={{ background: "#1C1C1E", border: `0.5px solid ${CARD_BORDER}` }}
+        className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl px-4 pt-5"
+        style={{ background: "#1C1C1E", border: `0.5px solid ${CARD_BORDER}`, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 80px)" }}
       >
         {/* Handle */}
         <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: "rgba(255,255,255,0.15)" }} />

@@ -11,10 +11,21 @@
   }
 
   body {
-    background: linear-gradient(160deg, #0B1E14 0%, #061009 60%, #071510 100%);
-    background-attachment: fixed;
+    background: transparent;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* iOS-safe stationary gradient. `background-attachment: fixed` on body
+     triggers a slow-repaint path on iOS Safari that mis-positions other
+     fixed / backdrop-filter elements (e.g. BottomNav) during scroll.
+     A fixed full-screen layer behind content gives the same look safely. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(160deg, #0B1E14 0%, #061009 60%, #071510 100%);
   }
 
   .pb-safe {

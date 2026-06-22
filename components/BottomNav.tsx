@@ -33,6 +33,10 @@ export function BottomNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
+        // translateZ(0) forces a stable own compositing layer so the fixed
+        // nav stays pinned to the viewport on iOS. willChange alone is only a
+        // hint and intermittently fails alongside backdrop-filter on iOS.
+        transform: "translateZ(0)",
         willChange: "transform",
         background: "rgba(7,21,16,0.94)",
         backdropFilter: "blur(24px)",

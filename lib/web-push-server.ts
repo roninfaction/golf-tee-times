@@ -92,23 +92,56 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
   return out;
 }
 
-async function createVapidJWT(endpoint: string, privateKeyPkcs8B64u: string): Promise<string> {
-  const url = new URL(endpoint);
-  const aud = `${url.protocol}//${url.host}`;
+// Sign a VAPID JWT given an already-imported ECDSA CryptoKey — avoids re-importing the key
+// for every subscription when sending bulk notifications.
+async function signVapidJwt(aud: string, privateKey: CryptoKey): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + 43200;
   const sub = process.env.VAPID_SUBJECT ?? "mailto:noreply@golfpack.app";
-
   const header = b64uEncode(enc.encode(JSON.stringify({ alg: "ES256", typ: "JWT" })));
   const payload = b64uEncode(enc.encode(JSON.stringify({ aud, exp, sub })));
   const sigInput = enc.encode(`${header}.${payload}`);
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, sigInput);
+  return `${header}.${payload}.${b64uEncode(new Uint8Array(sig))}`;
+}
 
+async function createVapidJWT(endpoint: string, privateKeyPkcs8B64u: string): Promise<string> {
+  const url = new URL(endpoint);
+  const aud = `${url.protocol}//${url.host}`;
   const privateKey = await crypto.subtle.importKey(
     "pkcs8", b64uDecode(privateKeyPkcs8B64u),
     { name: "ECDSA", namedCurve: "P-256" },
     false, ["sign"]
   );
-  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, privateKey, sigInput);
-  return `${header}.${payload}.${b64uEncode(new Uint8Array(sig))}`;
+  return signVapidJwt(aud, privateKey);
+}
+
+// Internal dispatch: send a push with a pre-computed JWT (avoids re-signing per subscription).
+async function dispatchWebPush(
+  subscription: PushSubscription,
+  notification: { title: string; body: string; data?: Record<string, string> },
+  publicKey: string,
+  jwt: string,
+): Promise<{ ok: boolean; status?: number; body?: string; expired?: boolean }> {
+  const encrypted = await encryptPayload(subscription.p256dh, subscription.auth, JSON.stringify(notification));
+  const res = await fetch(subscription.endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `vapid t=${jwt},k=${publicKey}`,
+      "Content-Type": "application/octet-stream",
+      "Content-Encoding": "aes128gcm",
+      TTL: "86400",
+      Urgency: "high",
+    },
+    body: encrypted,
+  });
+
+  const ok = res.status === 201;
+  // 410/404: subscription explicitly gone. 401/403: VAPID key mismatch (subscription created
+  // with a different applicationServerKey — treat as unrecoverable so the DB record is cleared
+  // and the user gets prompted to re-register on next app open.
+  const expired = res.status === 410 || res.status === 404 || res.status === 401 || res.status === 403;
+  const respBody = ok ? undefined : await res.text().catch(() => "");
+  return { ok, status: res.status, body: respBody, expired };
 }
 
 export type PushSubscription = { endpoint: string; p256dh: string; auth: string };
@@ -141,9 +174,6 @@ export async function sendWebPush(
   });
 
   const ok = res.status === 201;
-  // 410/404: subscription explicitly gone. 401/403: VAPID key mismatch (subscription created
-  // with a different applicationServerKey — treat as unrecoverable so the DB record is cleared
-  // and the user gets prompted to re-register on next app open.
   const expired = res.status === 410 || res.status === 404 || res.status === 401 || res.status === 403;
   const respBody = ok ? undefined : await res.text().catch(() => "");
   return { ok, status: res.status, body: respBody, expired };
@@ -177,6 +207,9 @@ export async function sendEmptyPush(
   return { ok, status: res.status, body: respBody, expired };
 }
 
+// Max concurrent push dispatches per batch. Limits peak crypto + subrequest load per Worker invocation.
+const PUSH_BATCH_SIZE = 5;
+
 export async function sendPush({
   subscriptions, title, body, data,
 }: {
@@ -186,20 +219,61 @@ export async function sendPush({
   data?: Record<string, string>;
 }): Promise<{ expiredEndpoints: string[] }> {
   if (!subscriptions.length) return { expiredEndpoints: [] };
-  const results = await Promise.allSettled(subscriptions.map((sub) => sendWebPush(sub, { title, body, data })));
+
+  const publicKey = process.env.VAPID_PUBLIC_KEY ?? process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKeyB64u = process.env.VAPID_PRIVATE_KEY;
+  if (!publicKey || !privateKeyB64u) {
+    console.error("[web-push] VAPID keys not configured. Set VAPID_PRIVATE_KEY in Cloudflare Pages environment variables.");
+    return { expiredEndpoints: [] };
+  }
+
+  // Import the ECDSA private key once for all subscriptions in this batch.
+  // Previously imported once per subscription — O(N) imports reduced to O(1).
+  const privateKey = await crypto.subtle.importKey(
+    "pkcs8", b64uDecode(privateKeyB64u),
+    { name: "ECDSA", namedCurve: "P-256" },
+    false, ["sign"]
+  );
+
+  // Sign one VAPID JWT per unique endpoint host. In practice almost all Chrome/Edge
+  // subscribers share fcm.googleapis.com, so this is typically 1-3 sign operations
+  // instead of one per subscriber.
+  const uniqueHosts = [...new Set(subscriptions.map(s => {
+    const u = new URL(s.endpoint);
+    return `${u.protocol}//${u.host}`;
+  }))];
+  const jwtByHost = new Map<string, string>();
+  for (const host of uniqueHosts) {
+    jwtByHost.set(host, await signVapidJwt(host, privateKey));
+  }
+
+  const notification = { title, body, data };
   const expiredEndpoints: string[] = [];
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    if (r.status === "fulfilled") {
-      if (!r.value.ok) {
-        console.error(`[web-push] sendPush failed: status=${r.value.status} body=${r.value.body}`);
+
+  // Process in fixed-size batches to cap concurrent crypto + subrequest load.
+  for (let i = 0; i < subscriptions.length; i += PUSH_BATCH_SIZE) {
+    const batch = subscriptions.slice(i, i + PUSH_BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(sub => {
+        const u = new URL(sub.endpoint);
+        const jwt = jwtByHost.get(`${u.protocol}//${u.host}`)!;
+        return dispatchWebPush(sub, notification, publicKey, jwt);
+      })
+    );
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      if (r.status === "fulfilled") {
+        if (!r.value.ok) {
+          console.error(`[web-push] sendPush failed: status=${r.value.status} body=${r.value.body}`);
+        }
+        if (r.value.expired) {
+          expiredEndpoints.push(batch[j].endpoint);
+        }
+      } else {
+        console.error("[web-push] sendPush threw:", r.reason);
       }
-      if (r.value.expired) {
-        expiredEndpoints.push(subscriptions[i].endpoint);
-      }
-    } else {
-      console.error("[web-push] sendPush threw:", r.reason);
     }
   }
+
   return { expiredEndpoints };
 }

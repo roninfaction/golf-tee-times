@@ -112,7 +112,7 @@ function LoginForm() {
           <div className="rounded-2xl overflow-hidden" style={cardStyle}>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (e.g. Matt)" required autoComplete="name" className={inputStyle} style={dividerStyle} />
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required autoComplete="email" className={inputStyle} style={dividerStyle} />
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (min 6 characters)" required minLength={6} autoComplete="new-password" className={inputStyle} />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (min 8 characters)" required minLength={8} autoComplete="new-password" className={inputStyle} />
           </div>
           {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
           <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl text-base font-semibold text-black" style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}>

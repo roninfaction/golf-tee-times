@@ -33,14 +33,19 @@ export function BottomNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
-        // translateZ(0) forces a stable own compositing layer so the fixed
-        // nav stays pinned to the viewport on iOS. willChange alone is only a
-        // hint and intermittently fails alongside backdrop-filter on iOS.
-        transform: "translateZ(0)",
-        willChange: "transform",
-        background: "rgba(7,21,16,0.94)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
+        // Must stay an opaque, non-composited fixed element.
+        //
+        // backdrop-filter needs a backdrop root to sample. On a position:fixed
+        // element iOS WebKit resolves that root to the scrolling contents layer,
+        // then paints the nav at whatever offset it had at the last repaint —
+        // so it drifts up the page as you scroll instead of staying pinned.
+        // translateZ(0)/willChange made it worse: forcing layer promotion is
+        // what hands the nav to the scrolling layer in the first place.
+        //
+        // The background was already 94% opaque, so the blur was sampling ~6%
+        // of the page for no visible gain. Opaque + no filter = no backdrop
+        // root = nothing for WebKit to mis-attach.
+        background: "#071510",
         borderTop: "0.5px solid rgba(80,200,110,0.22)",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
       }}

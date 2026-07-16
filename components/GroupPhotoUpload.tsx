@@ -1,13 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import { createClient } from "@/lib/supabase/browser";
-import { Camera, AlertCircle, X } from "lucide-react";
+import { getCroppedBlob } from "@/lib/crop-image";
+import { Camera, AlertCircle, Check, X } from "lucide-react";
 
 interface Props {
   groupId: string;
   currentPhotoUrl: string | null;
 }
+
+// The banner renders at this aspect on every phone (see the container below), so cropping
+// to it means what you frame is exactly what you get. 1600 wide covers a 3x retina phone.
+const COVER_ASPECT = 3 / 2;
+const COVER_MAX_WIDTH = 1600;
 
 export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
   const [photoUrl, setPhotoUrl] = useState(currentPhotoUrl);
@@ -16,14 +24,42 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // Crop modal state
+  const [rawSrc, setRawSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    const url = URL.createObjectURL(file);
+    setRawSrc(url);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setError(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
 
+  const onCropComplete = useCallback((_: Area, pixels: Area) => {
+    setCroppedAreaPixels(pixels);
+  }, []);
+
+  function cancelCrop() {
+    if (rawSrc) URL.revokeObjectURL(rawSrc);
+    setRawSrc(null);
+  }
+
+  async function confirmCrop() {
+    if (!rawSrc || !croppedAreaPixels) return;
     setUploading(true);
     setError(null);
-
     try {
+      const blob = await getCroppedBlob(rawSrc, croppedAreaPixels, COVER_MAX_WIDTH);
+      URL.revokeObjectURL(rawSrc);
+      setRawSrc(null);
+
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -31,12 +67,13 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
         return;
       }
 
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${groupId}/cover.${ext}`;
+      // Always .jpg: the cropper re-encodes to JPEG, and a fixed name means each upload
+      // upserts the same object instead of leaving an orphan behind per file extension.
+      const path = `${groupId}/cover.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("group-photos")
-        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: "31536000" });
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "31536000" });
 
       if (uploadError) {
         setError(`Upload failed: ${uploadError.message}`);
@@ -73,20 +110,24 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
   return (
     <>
       <div>
-        <div className="relative w-full" style={{ height: 260 }}>
+        {/*
+          aspectRatio matches COVER_ASPECT so the saved crop displays exactly as framed on
+          any phone. maxHeight only binds above ~480px wide (desktop), where a 3:2 banner
+          would otherwise be absurdly tall — the page has no max-width wrapper.
+        */}
+        <div className="relative w-full" style={{ aspectRatio: "3 / 2", maxHeight: 320 }}>
           {photoUrl ? (
             <img
               src={photoUrl}
               alt="Group photo"
               className="w-full h-full object-cover cursor-pointer"
-              style={{ borderRadius: "0 0 20px 20px", objectPosition: "center 25%" }}
+              style={{ borderRadius: "0 0 20px 20px" }}
               onClick={() => setLightboxOpen(true)}
             />
           ) : (
@@ -151,6 +192,63 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
           </div>
         )}
       </div>
+
+      {/* Crop modal */}
+      {rawSrc && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "#000" }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 pt-12 pb-4 shrink-0">
+            <button onClick={cancelCrop} className="flex items-center gap-1.5 text-sm font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
+              <X size={16} />
+              Cancel
+            </button>
+            <p className="text-sm font-semibold text-white">Move and Scale</p>
+            <button
+              onClick={confirmCrop}
+              disabled={uploading}
+              className="flex items-center gap-1.5 text-sm font-semibold"
+              style={{ color: "#30D158" }}
+            >
+              {uploading
+                ? <div className="w-4 h-4 border-2 border-green-500/30 border-t-green-500 rounded-full animate-spin" />
+                : <><Check size={16} />Use Photo</>
+              }
+            </button>
+          </div>
+
+          {/* Cropper */}
+          <div className="relative flex-1">
+            <Cropper
+              image={rawSrc}
+              crop={crop}
+              zoom={zoom}
+              aspect={COVER_ASPECT}
+              showGrid
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+              style={{
+                containerStyle: { background: "#000" },
+                cropAreaStyle: { border: "2px solid rgba(255,255,255,0.8)", boxShadow: "0 0 0 9999px rgba(0,0,0,0.7)" },
+              }}
+            />
+          </div>
+
+          {/* Zoom slider */}
+          <div className="px-8 py-6 shrink-0">
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.01}
+              value={zoom}
+              onChange={e => setZoom(Number(e.target.value))}
+              className="w-full accent-green-400"
+              aria-label="Zoom"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightboxOpen && photoUrl && (

@@ -4,32 +4,16 @@ import { useCallback, useRef, useState } from "react";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import { createClient } from "@/lib/supabase/browser";
+import { getCroppedBlob } from "@/lib/crop-image";
 import { Camera, AlertCircle, Check, X } from "lucide-react";
 
 const GOLD = "#C9A84C";
+const AVATAR_MAX_WIDTH = 600;
 
 interface Props {
   userId: string;
   currentAvatarUrl: string | null;
   displayName: string;
-}
-
-async function getCroppedBlob(imageSrc: string, pixelCrop: Area): Promise<Blob> {
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const i = new Image();
-    i.onload = () => resolve(i);
-    i.onerror = reject;
-    i.src = imageSrc;
-  });
-  const canvas = document.createElement("canvas");
-  const size = Math.min(pixelCrop.width, pixelCrop.height, 600);
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, size, size);
-  return new Promise((resolve, reject) =>
-    canvas.toBlob(b => b ? resolve(b) : reject(new Error("Canvas toBlob failed")), "image/jpeg", 0.92)
-  );
 }
 
 export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
@@ -74,7 +58,7 @@ export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
     setUploading(true);
     setError(null);
     try {
-      const blob = await getCroppedBlob(rawSrc, croppedAreaPixels);
+      const blob = await getCroppedBlob(rawSrc, croppedAreaPixels, AVATAR_MAX_WIDTH);
       URL.revokeObjectURL(rawSrc);
       setRawSrc(null);
 

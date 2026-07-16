@@ -36,7 +36,7 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
 
       const { error: uploadError } = await supabase.storage
         .from("group-photos")
-        .upload(path, file, { upsert: true, contentType: file.type });
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: "31536000" });
 
       if (uploadError) {
         setError(`Upload failed: ${uploadError.message}`);
@@ -47,13 +47,19 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
         .from("group-photos")
         .getPublicUrl(path);
 
-      const res = await fetch("/api/groups", {
+      // Fixed storage path, so version the stored URL or browsers keep serving the cached
+      // previous cover. Same reasoning as AvatarUpload.
+      const versionedUrl = `${publicUrl}?v=${Date.now()}`;
+
+      // PATCH lives at /api/groups/[id] — /api/groups only exposes GET and POST, so posting
+      // the group id in the body silently 405'd and the cover never saved.
+      const res = await fetch(`/api/groups/${groupId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ photo_url: publicUrl }),
+        body: JSON.stringify({ photo_url: versionedUrl }),
       });
 
       if (!res.ok) {
@@ -62,7 +68,7 @@ export function GroupPhotoUpload({ groupId, currentPhotoUrl }: Props) {
         return;
       }
 
-      setPhotoUrl(`${publicUrl}?t=${Date.now()}`);
+      setPhotoUrl(versionedUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

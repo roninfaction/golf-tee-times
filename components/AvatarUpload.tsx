@@ -85,11 +85,18 @@ export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
       const path = `${userId}/avatar.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "31536000" });
 
       if (uploadError) { setError(`Upload failed: ${uploadError.message}`); return; }
 
       const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+
+      // The storage path is fixed, so a new avatar changes the bytes but not the URL —
+      // browsers keep serving their cached copy of the old image, and the upload looks like
+      // it reverted as soon as you navigate away. Persist a *versioned* URL so every
+      // consumer (this page, group lists, tee-time rosters) requests a URL it has never
+      // cached. Versioning the URL is also what makes the year-long cacheControl above safe.
+      const versionedUrl = `${publicUrl}?v=${Date.now()}`;
 
       const res = await fetch("/api/profile", {
         method: "PATCH",
@@ -97,7 +104,7 @@ export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ avatar_url: publicUrl }),
+        body: JSON.stringify({ avatar_url: versionedUrl }),
       });
 
       if (!res.ok) {
@@ -106,7 +113,7 @@ export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
         return;
       }
 
-      setAvatarUrl(`${publicUrl}?t=${Date.now()}`);
+      setAvatarUrl(versionedUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

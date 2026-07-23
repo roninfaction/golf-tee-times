@@ -35,7 +35,13 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clients) => {
       const match = clients.find((c) => c.url.indexOf(self.location.origin) !== -1);
-      if (match) { match.focus(); match.navigate(url); }
+      // Reuse the open window via a SOFT navigation (postMessage -> router.push
+      // in SwNavigationHandler), NOT client.navigate(). On iOS standalone,
+      // client.navigate() is a full document reload of a backgrounded window;
+      // fixed bottom:0 elements then resolve against a stale viewport height and
+      // the BottomNav paints mid-page. postMessage keeps it the same client-side
+      // route change as an in-app tap, so the layout stays correct.
+      if (match) { match.focus(); match.postMessage({ type: "SW_NAVIGATE", url }); }
       else self.clients.openWindow(url);
     })
   );

@@ -15,7 +15,10 @@ type Phase = "verifying" | "form" | "invalid" | "done";
 
 function ResetForm() {
   const searchParams = useSearchParams();
-  const [phase, setPhase] = useState<Phase>("verifying");
+  const tokenHash = searchParams.get("token_hash");
+  const hasRecoveryLink = !!tokenHash && searchParams.get("type") === "recovery";
+  // Derive the missing-token state at init so the effect never calls setState synchronously.
+  const [phase, setPhase] = useState<Phase>(hasRecoveryLink ? "verifying" : "invalid");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,17 +26,12 @@ function ResetForm() {
 
   // Exchange the one-time recovery token for a session on mount.
   useEffect(() => {
-    const tokenHash = searchParams.get("token_hash");
-    const type = searchParams.get("type");
-    if (!tokenHash || type !== "recovery") {
-      setPhase("invalid");
-      return;
-    }
+    if (!hasRecoveryLink || !tokenHash) return;
     const supabase = createClient();
     supabase.auth
       .verifyOtp({ token_hash: tokenHash, type: "recovery" })
       .then(({ error }) => setPhase(error ? "invalid" : "form"));
-  }, [searchParams]);
+  }, [hasRecoveryLink, tokenHash]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -4,7 +4,7 @@ import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "reset";
 
 const inputStyle = "w-full px-4 py-3.5 text-white text-[15px] bg-transparent outline-none placeholder:text-white/20";
 const dividerStyle = { borderBottom: "0.5px solid rgba(255,255,255,0.08)" } as React.CSSProperties;
@@ -19,6 +19,21 @@ function LoginForm() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    await fetch("/api/auth/reset-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    }).catch(() => {});
+    setLoading(false);
+    // Uniform confirmation whether or not the email is registered.
+    setResetSent(true);
+  }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -79,24 +94,53 @@ function LoginForm() {
       </div>
 
       {/* Mode toggle */}
-      <div className="flex rounded-xl mb-6 p-0.5" style={{ background: "rgba(255,255,255,0.06)" }}>
-        {(["signin", "signup"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => { setMode(m); setError(""); }}
-            className="flex-1 py-2 rounded-[10px] text-sm font-semibold transition-all"
-            style={{
-              background: mode === m ? "rgba(255,255,255,0.1)" : "transparent",
-              color: mode === m ? "#fff" : "rgba(255,255,255,0.4)",
-            }}
-          >
-            {m === "signin" ? "Sign In" : "Create Account"}
-          </button>
-        ))}
-      </div>
+      {mode !== "reset" && (
+        <div className="flex rounded-xl mb-6 p-0.5" style={{ background: "rgba(255,255,255,0.06)" }}>
+          {(["signin", "signup"] as Mode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setError(""); }}
+              className="flex-1 py-2 rounded-[10px] text-sm font-semibold transition-all"
+              style={{
+                background: mode === m ? "rgba(255,255,255,0.1)" : "transparent",
+                color: mode === m ? "#fff" : "rgba(255,255,255,0.4)",
+              }}
+            >
+              {m === "signin" ? "Sign In" : "Create Account"}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {mode === "signin" ? (
+      {mode === "reset" ? (
+        resetSent ? (
+          <div className="space-y-6">
+            <div className="rounded-2xl p-5" style={cardStyle}>
+              <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+                If an account exists for <span className="text-white font-medium">{email.trim()}</span>, a password reset link is on its way. Check your inbox (and spam) — the link expires in 1 hour.
+              </p>
+            </div>
+            <button type="button" onClick={() => { setMode("signin"); setResetSent(false); setError(""); }} className="w-full py-4 rounded-2xl text-base font-semibold text-black" style={{ background: "#30D158" }}>
+              Back to sign in
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <p className="text-sm px-1 mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>Enter your email and we&apos;ll send you a link to reset your password.</p>
+            <div className="rounded-2xl overflow-hidden" style={cardStyle}>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required autoComplete="email" className={inputStyle} />
+            </div>
+            {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
+            <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl text-base font-semibold text-black" style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}>
+              {loading ? "Sending…" : "Send reset link"}
+            </button>
+            <button type="button" onClick={() => { setMode("signin"); setError(""); }} className="w-full py-2 text-sm font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Back to sign in
+            </button>
+          </form>
+        )
+      ) : mode === "signin" ? (
         <form onSubmit={handleSignIn} className="space-y-4">
           <div className="rounded-2xl overflow-hidden" style={cardStyle}>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required autoComplete="email" className={inputStyle} style={dividerStyle} />
@@ -105,6 +149,9 @@ function LoginForm() {
           {error && <p className="text-sm px-1" style={{ color: "#FF453A" }}>{error}</p>}
           <button type="submit" disabled={loading} className="w-full py-4 rounded-2xl text-base font-semibold text-black" style={{ background: "#30D158", opacity: loading ? 0.6 : 1 }}>
             {loading ? "Signing in…" : "Sign In"}
+          </button>
+          <button type="button" onClick={() => { setMode("reset"); setError(""); setResetSent(false); }} className="w-full py-1 text-sm font-medium" style={{ color: "rgba(255,255,255,0.4)" }}>
+            Forgot password?
           </button>
         </form>
       ) : (

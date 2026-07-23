@@ -40,7 +40,9 @@ export async function middleware(request: NextRequest) {
 
   const publicPaths = [
     "/login",
+    "/reset-password",  // set a new password via emailed recovery link
     "/auth/callback",
+    "/api/auth/reset-request",  // request a reset email (no session)
     "/invite",          // group join links
     "/fill",            // guest tee time accept (no account required)
     "/api/webhooks",

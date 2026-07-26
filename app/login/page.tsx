@@ -13,7 +13,8 @@ const cardStyle = { background: "rgba(255,255,255,0.05)", border: "0.5px solid r
 function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/upcoming";
-  const [mode, setMode] = useState<Mode>("signin");
+  const initialMode: Mode = searchParams.get("mode") === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

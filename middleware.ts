@@ -44,6 +44,7 @@ export async function middleware(request: NextRequest) {
     "/auth/callback",
     "/api/auth/reset-request",  // request a reset email (no session)
     "/invite",          // group join links
+    "/join",            // app invite links (sign up → create own group)
     "/fill",            // guest tee time accept (no account required)
     "/api/webhooks",
     "/api/health",
@@ -55,6 +56,7 @@ export async function middleware(request: NextRequest) {
     "/api/rsvps",                 // uses Bearer token auth, not cookies
     "/api/push",                  // uses Bearer token auth, not cookies
     "/api/guest-invites",         // uses Bearer token auth, not cookies
+    "/api/app-invites",           // uses Bearer token auth, not cookies
     "/share",                     // public shareable results pages
   ];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { Copy, Check, LogOut, ChevronRight, Bell, BellOff, Bug } from "lucide-react";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { BugReportModal } from "@/components/BugReportModal";
+import { InviteFriendButton } from "@/components/InviteFriendButton";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -456,6 +457,14 @@ export default function ProfilePage() {
             ) : (
               <p className="text-sm" style={{ color: "rgba(255,255,255,0.3)" }}>No address available.</p>
             )}
+          </div>
+        </div>
+
+        {/* Invite a friend to the app */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Invite a friend</p>
+          <div className="rounded-2xl p-4" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+            <InviteFriendButton />
           </div>
         </div>
 

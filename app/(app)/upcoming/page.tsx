@@ -39,22 +39,10 @@ export default async function UpcomingPage() {
   const groupId = membership?.group_id;
   const invitedIds = (myRsvpRows ?? []).map((r: { tee_time_id: string }) => r.tee_time_id);
 
-  // Only show "No group yet" if the user also has no accepted tee times to display.
+  // A user with no group and no accepted tee times must create a group first
+  // (forced onboarding). /group/setup is the one app page exempt from this.
   if (!groupId && invitedIds.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: "rgba(201,168,76,0.15)" }}>
-          <span className="text-3xl">⛳</span>
-        </div>
-        <h2 className="text-xl font-semibold text-white mb-2">No group yet</h2>
-        <p className="text-sm mb-8" style={{ color: "rgba(255,255,255,0.45)" }}>
-          Create a group for your crew or join one with an invite link.
-        </p>
-        <Link href="/group/setup" className="font-semibold px-6 py-3 rounded-xl text-sm text-black" style={{ background: "#30D158" }}>
-          Get started
-        </Link>
-      </div>
-    );
+    redirect("/group/setup");
   }
 
   const today = new Date();

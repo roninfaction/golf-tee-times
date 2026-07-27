@@ -38,12 +38,22 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "gross_score must be between 50 and 180" }, { status: 400 });
   }
 
+  // hole_scores is an object keyed by hole number, e.g. {"1": 4, "2": 5} — matches the OCR
+  // output and every consumer (share page, ScoreSection, DigitalScorecard) which read it as such.
   if (hole_scores !== undefined && hole_scores !== null) {
-    if (!Array.isArray(hole_scores) || hole_scores.length > 18) {
-      return NextResponse.json({ error: "hole_scores must be an array of up to 18 values" }, { status: 400 });
+    if (typeof hole_scores !== "object" || Array.isArray(hole_scores)) {
+      return NextResponse.json({ error: "hole_scores must be an object keyed by hole number" }, { status: 400 });
     }
-    for (const s of hole_scores) {
-      if (!Number.isInteger(s) || s < 1 || s > 20) {
+    const entries = Object.entries(hole_scores as Record<string, unknown>);
+    if (entries.length > 18) {
+      return NextResponse.json({ error: "hole_scores can have at most 18 holes" }, { status: 400 });
+    }
+    for (const [hole, strokes] of entries) {
+      const h = Number(hole);
+      if (!Number.isInteger(h) || h < 1 || h > 18) {
+        return NextResponse.json({ error: "hole_scores keys must be hole numbers 1-18" }, { status: 400 });
+      }
+      if (!Number.isInteger(strokes) || (strokes as number) < 1 || (strokes as number) > 20) {
         return NextResponse.json({ error: "Each hole score must be a whole number between 1 and 20" }, { status: 400 });
       }
     }

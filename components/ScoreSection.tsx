@@ -519,8 +519,8 @@ export function ScoreSection({
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
-    const results = await Promise.all(toSave.map(p =>
-      fetch(`/api/tee-times/${teeTimeId}/scores`, {
+    const results = await Promise.all(toSave.map(async p => {
+      const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
@@ -535,10 +535,14 @@ export function ScoreSection({
               ? { target_user_id: p.user_id }
               : {}),
         }),
-      }).then(r => r.ok)
-    ));
+      });
+      if (res.ok) return { ok: true as const };
+      const body = await res.json().catch(() => ({}));
+      return { ok: false as const, error: (body as { error?: string }).error ?? null };
+    }));
 
-    const failCount = results.filter(ok => !ok).length;
+    const failures = results.filter(r => !r.ok);
+    const failCount = failures.length;
 
     const res = await fetch(`/api/tee-times/${teeTimeId}/scores`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
@@ -554,7 +558,10 @@ export function ScoreSection({
 
     setGroupSaving(false);
     if (failCount > 0) {
-      setGroupSaveError(`${failCount} score${failCount > 1 ? "s" : ""} couldn't be saved — check each player has an RSVP`);
+      const reason = failures.map(f => f.error).find(Boolean);
+      setGroupSaveError(
+        `${failCount} score${failCount > 1 ? "s" : ""} couldn't be saved${reason ? ` — ${reason}` : " — check each player has an RSVP"}`
+      );
     } else {
       setGroupSaved(true);
       setTimeout(() => { setGroupSaved(false); setGroupStep("idle"); }, 2500);

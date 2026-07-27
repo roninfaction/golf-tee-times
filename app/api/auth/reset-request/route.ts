@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendEmail, resendDiagnostics } from "@/lib/resend";
+import { sendEmail } from "@/lib/resend";
 import { NextResponse } from "next/server";
 
 const SITE_URL = "https://golfpack.app";
@@ -26,13 +26,6 @@ export async function POST(request: Request) {
     const { email } = (await request.json()) as { email?: string };
     const clean = (email ?? "").trim().toLowerCase();
 
-    // TEMP DIAGNOSTIC: callers holding the service-role key get the real send result echoed back.
-    const debugKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    const debugOn = !!debugKey && request.headers.get("x-reset-debug") === debugKey;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const debug: any = { generateLink: null, send: null, resend: null };
-    if (debugOn) debug.resend = await resendDiagnostics();
-
     // Basic shape check; always respond ok below to avoid leaking which emails exist.
     if (clean && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) {
       const service = createServiceClient();
@@ -42,7 +35,6 @@ export async function POST(request: Request) {
       });
 
       const hashedToken = data?.properties?.hashed_token;
-      debug.generateLink = { ok: !error && !!hashedToken, error: error?.message ?? null };
       if (!error && hashedToken) {
         const link = `${SITE_URL}/reset-password?token_hash=${hashedToken}&type=recovery`;
         const result = await sendEmail({
@@ -50,7 +42,7 @@ export async function POST(request: Request) {
           subject: "Reset your GolfPack password",
           html: resetEmailHtml(link),
         });
-        debug.send = result;
+        if (!result.ok) console.error("reset-request send failed:", result.status, result.error);
       } else if (error && !/user not found|not found|no user/i.test(error.message)) {
         // Log unexpected errors, but still return ok to the client.
         console.error("reset-request generateLink error:", error.message);
@@ -58,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     // Uniform response regardless of whether the account exists.
-    return NextResponse.json(debugOn ? { ok: true, debug } : { ok: true });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("reset-request error:", e);
     // Still return ok — never reveal internal state to an unauthenticated caller.

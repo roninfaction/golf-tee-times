@@ -1,22 +1,6 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
 const FROM = "GolfPack <noreply@golfpack.app>";
 
-// TEMP DIAGNOSTIC: report which Resend account/domains the live key can see.
-export async function resendDiagnostics() {
-  if (!RESEND_API_KEY) return { ok: false, error: "RESEND_API_KEY not configured" };
-  const res = await fetch("https://api.resend.com/domains", {
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
-  });
-  const body = await res.json().catch(() => null);
-  return {
-    ok: res.ok,
-    status: res.status,
-    keyPrefix: RESEND_API_KEY.slice(0, 8),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    domains: (body?.data ?? body) as any,
-  };
-}
-
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }): Promise<{ ok: boolean; status?: number; error?: string }> {
   if (!RESEND_API_KEY) {
     console.error("RESEND_API_KEY not configured");

@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/resend";
+import { sendEmail, resendDiagnostics } from "@/lib/resend";
 import { NextResponse } from "next/server";
 
 const SITE_URL = "https://golfpack.app";
@@ -30,7 +30,8 @@ export async function POST(request: Request) {
     const debugKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
     const debugOn = !!debugKey && request.headers.get("x-reset-debug") === debugKey;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const debug: any = { generateLink: null, send: null };
+    const debug: any = { generateLink: null, send: null, resend: null };
+    if (debugOn) debug.resend = await resendDiagnostics();
 
     // Basic shape check; always respond ok below to avoid leaking which emails exist.
     if (clean && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) {

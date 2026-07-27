@@ -1,10 +1,10 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
 const FROM = "GolfPack <noreply@golfpack.app>";
 
-export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
+export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }): Promise<{ ok: boolean; status?: number; error?: string }> {
   if (!RESEND_API_KEY) {
     console.error("RESEND_API_KEY not configured");
-    return false;
+    return { ok: false, error: "RESEND_API_KEY not configured" };
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -14,8 +14,12 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
     },
     body: JSON.stringify({ from: FROM, to, subject, html }),
   });
-  if (!res.ok) console.error("Resend error:", await res.text());
-  return res.ok;
+  if (!res.ok) {
+    const error = await res.text();
+    console.error("Resend error:", res.status, error);
+    return { ok: false, status: res.status, error };
+  }
+  return { ok: true, status: res.status };
 }
 
 export function guestReminderHtml({

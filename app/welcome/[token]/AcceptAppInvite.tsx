@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
-// Runs once for a signed-in visitor of /join/[token]: records referral
+// Runs once for a signed-in visitor of /welcome/[token]: records referral
 // attribution, then forces group creation (force create-group onboarding) when
 // the user has no group yet, otherwise drops them on the schedule.
 export function AcceptAppInvite({ token }: { token: string }) {
@@ -18,7 +18,7 @@ export function AcceptAppInvite({ token }: { token: string }) {
       try {
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { window.location.href = `/login?next=/join/${token}`; return; }
+        if (!session) { window.location.href = `/login?next=/welcome/${token}`; return; }
 
         const res = await fetch("/api/app-invites/accept", {
           method: "POST",

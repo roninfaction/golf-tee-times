@@ -36,6 +36,6 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const url = `${APP_URL}/join/${invite.token}`;
+  const url = `${APP_URL}/welcome/${invite.token}`;
   return NextResponse.json({ ok: true, token: invite.token, url }, { status: 201 });
 }

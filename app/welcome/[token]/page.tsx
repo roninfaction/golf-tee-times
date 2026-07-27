@@ -50,14 +50,14 @@ export default async function JoinPage({ params }: PageProps) {
         Set up tee times, RSVPs, and scoring for your own golf crew. Create your account and you&apos;ll be the admin of your group.
       </p>
       <Link
-        href={`/login?mode=signup&next=/join/${token}`}
+        href={`/login?mode=signup&next=/welcome/${token}`}
         className="font-semibold px-8 py-3.5 rounded-2xl text-base text-black"
         style={{ background: "#30D158" }}
       >
         Create your account
       </Link>
       <Link
-        href={`/login?next=/join/${token}`}
+        href={`/login?next=/welcome/${token}`}
         className="mt-4 text-sm font-medium"
         style={{ color: "rgba(255,255,255,0.4)" }}
       >

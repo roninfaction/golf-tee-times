@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
     "/auth/callback",
     "/api/auth/reset-request",  // request a reset email (no session)
     "/invite",          // group join links
-    "/join",            // app invite links (sign up → create own group)
+    "/welcome",         // app invite links (sign up → create own group)
     "/fill",            // guest tee time accept (no account required)
     "/api/webhooks",
     "/api/health",

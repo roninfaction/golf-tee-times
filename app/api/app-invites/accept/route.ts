@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { parseBody } from "@/lib/parse-body";
 
-// POST /api/app-invites/accept — called after a signed-in user lands on /join/[token].
+// POST /api/app-invites/accept — called after a signed-in user lands on /welcome/[token].
 // Stamps referral attribution (once, never overwritten) and reports whether the
 // user already belongs to a group, so the client can force group creation if not.
 export async function POST(request: NextRequest) {

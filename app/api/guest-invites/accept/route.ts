@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const result = data as { error?: string; ok?: boolean; teeTimeId?: string; courseName?: string; teeDate?: string };
+  const result = data as { error?: string; ok?: boolean; already?: boolean; teeTimeId?: string; courseName?: string; teeDate?: string };
 
   if (result.error) {
     const statusMap: Record<string, number> = {
@@ -40,9 +40,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Push notify all group members
+  // Push notify all group members (skip when this email was already accepted —
+  // a re-open of the link doesn't fill a new spot, so there's nothing to announce)
   const teeTimeId = result.teeTimeId;
-  if (teeTimeId) {
+  if (teeTimeId && !result.already) {
     const { data: teeTime } = await svc
       .from("tee_times")
       .select("group_id, course_name, tee_datetime")

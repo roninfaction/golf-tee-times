@@ -71,13 +71,9 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
             {copied ? <Check size={15} /> : <Copy size={15} />}
             {copied ? "Copied!" : "Copy link"}
           </button>
-          <button
-            onClick={generateLink}
-            className="text-xs w-full text-center"
-            style={{ color: "rgba(255,255,255,0.3)" }}
-          >
-            Generate another link
-          </button>
+          <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
+            Share this one link with everyone — it stays live until every spot is filled
+          </p>
         </>
       )}
 

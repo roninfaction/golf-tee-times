@@ -249,7 +249,7 @@ export function FillSpotClient({ token, data, groupTz, loggedInUser: serverLogge
             >
               {loading ? "Reserving spot…" : "Accept tee time"}
             </button>
-            <p className="text-slate-600 text-xs text-center">First to accept gets the spot. No account needed.</p>
+            <p className="text-slate-600 text-xs text-center">No account needed — just add your name to grab a spot.</p>
           </form>
         ))}
 

@@ -21,27 +21,18 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient();
 
-  // Atomically mark invite as expired (not "accepted") so it can't be reused,
-  // without contributing to the guest accepted-spot count.
-  // The member's spot is tracked via the rsvps table instead.
-  const { data: claimed } = await svc
+  // The token points at a durable "share link" template that stays pending for
+  // the life of the tee time — we do NOT consume it here. A member's spot is
+  // tracked via the rsvps table, and the link keeps working for the next person.
+  const { data: invite } = await svc
     .from("guest_invites")
-    .update({ status: "expired" })
+    .select("tee_time_id")
     .eq("token", token)
-    .eq("status", "pending")
-    .select("id, tee_time_id");
+    .maybeSingle();
 
-  if (!claimed || claimed.length === 0) {
-    const { data: existing } = await svc
-      .from("guest_invites")
-      .select("status")
-      .eq("token", token)
-      .maybeSingle();
-    if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ error: "already_claimed" }, { status: 409 });
-  }
+  if (!invite) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const teeTimeId = claimed[0].tee_time_id as string;
+  const teeTimeId = invite.tee_time_id as string;
 
   const { data: teeTime } = await svc
     .from("tee_times")
@@ -51,7 +42,17 @@ export async function POST(request: NextRequest) {
 
   if (!teeTime) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Verify there's still an open spot (rsvps + accepted guests, excluding the just-expired invite)
+  // If this member already RSVP'd, this is idempotent (the upsert below dedupes),
+  // so only enforce the spot cap for members who aren't already going.
+  const { data: existingRsvp } = await svc
+    .from("rsvps")
+    .select("status")
+    .eq("tee_time_id", teeTimeId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const alreadyGoing = existingRsvp?.status === "accepted";
+
+  // Verify there's still an open spot (accepted rsvps + accepted guests).
   const { count: acceptedRsvps } = await svc
     .from("rsvps")
     .select("*", { count: "exact", head: true })
@@ -65,8 +66,7 @@ export async function POST(request: NextRequest) {
     .eq("status", "accepted");
 
   const totalAccepted = (acceptedRsvps ?? 0) + (acceptedGuests ?? 0);
-  if (totalAccepted >= (teeTime as { max_players: number }).max_players) {
-    await svc.from("guest_invites").update({ status: "pending" }).eq("id", claimed[0].id);
+  if (!alreadyGoing && totalAccepted >= (teeTime as { max_players: number }).max_players) {
     return NextResponse.json({ error: "no_spots" }, { status: 409 });
   }
 

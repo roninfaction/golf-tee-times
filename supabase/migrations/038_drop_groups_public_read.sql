@@ -1,0 +1,22 @@
+-- 038_drop_groups_public_read.sql
+-- APPLIED 2026-09-08. Removes `groups_invite_read` (SELECT USING (true) TO public), which let
+-- ANY anonymous caller holding the anon key list every group in the app, names included.
+-- Confirmed live before the change: an unauthenticated read returned all 3 groups.
+--
+-- The name suggests it backs the invite flow. It does not, any more. Both paths that look up
+-- a group you are not yet a member of go through the SERVICE ROLE, which bypasses RLS:
+--   app/invite/[code]/page.tsx   -- createServiceClient(), commented "so non-members can look
+--                                   up the group by invite code"; redirects to /login first
+--   app/api/groups/join/route.ts -- createServiceClient(), requires a bearer token
+-- All 13 files touching `groups` are server-side; the single update runs createServiceClient()
+-- inside a server action. Nothing in a browser reads this table.
+--
+-- Remaining coverage unchanged:
+--   groups_members_read  SELECT -- you are in group_members for that group
+--   groups_admin_write   ALL    -- you are an admin of that group
+--
+-- Verified after: anon sees 0 of 3 groups; every member still sees their own group.
+-- Tightened ahead of GolfPack going public.
+-- Revert: CREATE POLICY groups_invite_read ON public.groups FOR SELECT USING (true);
+
+DROP POLICY groups_invite_read ON public.groups;

@@ -38,7 +38,10 @@ function useTeeWeather(lat: number, lng: number, teeIso: string, includeLater: b
     if (!(ahead > 0) || (!includeLater && ahead > WINDOW_MS)) return;
 
     const ctrl = new AbortController();
-    const qs = new URLSearchParams({ lat: String(lat), lng: String(lng), at: teeIso });
+    // Send UTC "Z" form: Postgres gives "+00:00", and that "+" reaches the route as a space
+    // after middleware on OpenNext, so the date failed to parse (400) for every real tee time.
+    const at = new Date(teeIso).toISOString();
+    const qs = new URLSearchParams({ lat: String(lat), lng: String(lng), at });
     fetch(`/api/weather?${qs}`, { signal: ctrl.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Weather request failed (${res.status})`);

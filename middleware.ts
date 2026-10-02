@@ -49,6 +49,7 @@ export async function middleware(request: NextRequest) {
     "/api/webhooks",
     "/api/health",
     "/api/cron",
+    "/api/admin",       // one-off admin routes, each protected by its own secret check
     "/api/guest-invites/accept",  // public endpoint
     "/api/profile",               // uses Bearer token auth, not cookies
     "/api/groups",                // uses Bearer token auth, not cookies

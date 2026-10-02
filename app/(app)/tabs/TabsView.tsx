@@ -14,7 +14,15 @@ const CARD_BORDER = "rgba(80,200,110,0.16)";
 const DIVIDER = "rgba(80,200,110,0.10)";
 const MUTED = "rgba(255,255,255,0.4)";
 
-export type TabPerson = { id: string; name: string; avatarUrl: string | null; balance: number };
+export type TabPerson = { id: string; name: string; avatarUrl: string | null; venmo: string | null; balance: number };
+
+// Opens the Venmo app with the payment (or request) filled in. Venmo has no API for apps to move
+// money between friends, so the person still taps Pay in Venmo; GolfPack can't see that it went
+// through, which is why "Mark settled" stays a separate tap. The note stays neutral on purpose.
+function venmoLink(username: string, cents: number, txn: "pay" | "charge") {
+  const params = new URLSearchParams({ txn, recipients: username, amount: (Math.abs(cents) / 100).toFixed(2), note: "GolfPack tab" });
+  return `venmo://paycharge?${params.toString()}`;
+}
 export type TabEntry = { id: string; otherId: string; cents: number; note: string | null; kind: string; course: string | null; createdAt: string };
 
 async function authHeaders() {
@@ -45,6 +53,7 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
   const [error, setError] = useState<string | null>(null);
   const [confirmSettle, setConfirmSettle] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [venmoOpened, setVenmoOpened] = useState<string | null>(null);
 
   // New bet form
   const [who, setWho] = useState<string>("");
@@ -283,6 +292,29 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
                         </div>
                       ))}
                     </div>
+
+                    {p.balance !== 0 && p.venmo && (
+                      <div className="mt-3">
+                        <a
+                          href={venmoLink(p.venmo, p.balance, p.balance < 0 ? "pay" : "charge")}
+                          onClick={() => setVenmoOpened(p.id)}
+                          className="block w-full py-3 rounded-xl text-sm font-semibold text-center text-white active:opacity-80"
+                          style={{ background: "#008CFF" }}
+                        >
+                          {p.balance < 0 ? `Pay ${money(p.balance)} in Venmo` : `Request ${money(p.balance)} in Venmo`}
+                        </a>
+                        {venmoOpened === p.id && (
+                          <p className="text-xs mt-2 px-1" style={{ color: MUTED }}>
+                            Once it goes through in Venmo, tap Settle up to clear the tab.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {p.balance !== 0 && !p.venmo && (
+                      <p className="text-xs mt-3 px-1" style={{ color: "rgba(255,255,255,0.3)" }}>
+                        {p.name.split(" ")[0]} hasn&apos;t added Venmo yet. It goes on the Profile tab.
+                      </p>
+                    )}
 
                     <div className="flex gap-2 mt-3">
                       <button

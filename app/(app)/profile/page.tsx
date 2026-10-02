@@ -30,6 +30,10 @@ export default function ProfilePage() {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [handicapIndex, setHandicapIndex] = useState("");
+  const [venmo, setVenmo] = useState("");
+  const [venmoSaving, setVenmoSaving] = useState(false);
+  const [venmoSaved, setVenmoSaved] = useState(false);
+  const [venmoError, setVenmoError] = useState("");
   const [handicapSaving, setHandicapSaving] = useState(false);
   const [handicapSaved, setHandicapSaved] = useState(false);
   const [handicapError, setHandicapError] = useState("");
@@ -61,7 +65,7 @@ export default function ProfilePage() {
 
       supabase
         .from("profiles")
-        .select("display_name, forwarder_token, push_subscription, avatar_url, ghin_handicap_index")
+        .select("display_name, forwarder_token, push_subscription, avatar_url, ghin_handicap_index, venmo_username")
         .eq("id", user.id)
         .single()
         .then(({ data }) => {
@@ -72,6 +76,8 @@ export default function ProfilePage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const hi = (data as any).ghin_handicap_index;
             if (hi !== null && hi !== undefined) setHandicapIndex(String(hi));
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            setVenmo((data as any).venmo_username ?? "");
             if (data.push_subscription) {
               setNotifState("registered");
             } else if (!("Notification" in window)) {
@@ -256,6 +262,29 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveVenmo(e: React.FormEvent) {
+    e.preventDefault();
+    setVenmoSaving(true);
+    setVenmoError("");
+    setVenmoSaved(false);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch("/api/profile/venmo", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      body: JSON.stringify({ venmo_username: venmo }),
+    });
+    setVenmoSaving(false);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setVenmoError(body.error ?? "Couldn't save that. Try again.");
+    } else {
+      setVenmo(body.venmo_username ?? "");
+      setVenmoSaved(true);
+      setTimeout(() => setVenmoSaved(false), 2000);
+    }
+  }
+
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
     setPasswordSaving(true);
@@ -375,6 +404,36 @@ export default function ProfilePage() {
             </button>
           </div>
           {handicapError && <p className="px-1 pt-2 text-xs" style={{ color: "#FF453A" }}>{handicapError}</p>}
+        </form>
+
+        {/* Venmo */}
+        <form onSubmit={saveVenmo}>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Venmo</p>
+          <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+            <div className="flex items-center px-4" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+              <span className="text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>@</span>
+              <input
+                type="text"
+                value={venmo}
+                onChange={e => setVenmo(e.target.value.replace(/^@/, "").replace(/\s/g, ""))}
+                placeholder="your-venmo-username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={30}
+                className="flex-1 pl-1 py-3.5 text-white text-sm bg-transparent outline-none placeholder:text-white/20"
+              />
+            </div>
+            <p className="px-4 py-2 text-xs" style={{ color: "rgba(255,255,255,0.3)", borderBottom: `0.5px solid ${DIVIDER}` }}>
+              Optional. Lets friends pay their side bet tab with you in Venmo in one tap.
+            </p>
+            <button type="submit" disabled={venmoSaving} className="w-full px-4 py-3.5 text-sm font-semibold text-left flex items-center justify-between" style={{ color: "#30D158" }}>
+              <span>{venmoSaved ? "Saved!" : venmoSaving ? "Saving…" : "Save Venmo"}</span>
+              {!venmoSaving && !venmoSaved && <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.2)" }} />}
+              {venmoSaved && <Check size={16} style={{ color: "#30D158" }} />}
+            </button>
+          </div>
+          {venmoError && <p className="px-1 pt-2 text-xs" style={{ color: "#FF453A" }}>{venmoError}</p>}
         </form>
 
         {/* Email forwarding */}

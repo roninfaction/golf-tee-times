@@ -29,14 +29,14 @@ export async function groupmates(svc: SupabaseClient, userId: string) {
   if (!groupIds.length) return [];
   const { data: rows } = await svc
     .from("group_members")
-    .select("user_id, profile:profiles(id, display_name, avatar_url)")
+    .select("user_id, profile:profiles(id, display_name, avatar_url, venmo_username)")
     .in("group_id", groupIds)
     .neq("user_id", userId);
-  const seen = new Map<string, { id: string; name: string; avatarUrl: string | null }>();
+  const seen = new Map<string, { id: string; name: string; avatarUrl: string | null; venmo: string | null }>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const r of (rows ?? []) as any[]) {
     if (!seen.has(r.user_id)) {
-      seen.set(r.user_id, { id: r.user_id, name: r.profile?.display_name ?? "Player", avatarUrl: r.profile?.avatar_url ?? null });
+      seen.set(r.user_id, { id: r.user_id, name: r.profile?.display_name ?? "Player", avatarUrl: r.profile?.avatar_url ?? null, venmo: r.profile?.venmo_username ?? null });
     }
   }
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));

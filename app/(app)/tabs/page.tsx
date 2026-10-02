@@ -23,8 +23,8 @@ export default async function TabsPage() {
   const people = new Map<string, TabPerson>(mates.map(m => [m.id, { ...m, balance: 0 }]));
   const missing = [...new Set(bets.map(b => (b.winner_id === user.id ? b.loser_id : b.winner_id)))].filter(id => !people.has(id));
   if (missing.length) {
-    const { data: profiles } = await svc.from("profiles").select("id, display_name, avatar_url").in("id", missing);
-    for (const p of profiles ?? []) people.set(p.id, { id: p.id, name: p.display_name ?? "Player", avatarUrl: p.avatar_url ?? null, balance: 0 });
+    const { data: profiles } = await svc.from("profiles").select("id, display_name, avatar_url, venmo_username").in("id", missing);
+    for (const p of profiles ?? []) people.set(p.id, { id: p.id, name: p.display_name ?? "Player", avatarUrl: p.avatar_url ?? null, venmo: p.venmo_username ?? null, balance: 0 });
   }
 
   const entries: TabEntry[] = bets.map(b => {

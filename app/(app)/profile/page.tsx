@@ -425,7 +425,7 @@ export default function ProfilePage() {
               />
             </div>
             <p className="px-4 py-2 text-xs" style={{ color: "rgba(255,255,255,0.3)", borderBottom: `0.5px solid ${DIVIDER}` }}>
-              Optional. Lets friends pay their side bet tab with you in Venmo in one tap.
+              Optional. Lets friends pay you in one tap. Pay and Request buttons show up on Side bets (Group tab) when you have a tab with someone.
             </p>
             <button type="submit" disabled={venmoSaving} className="w-full px-4 py-3.5 text-sm font-semibold text-left flex items-center justify-between" style={{ color: "#30D158" }}>
               <span>{venmoSaved ? "Saved!" : venmoSaving ? "Saving…" : "Save Venmo"}</span>

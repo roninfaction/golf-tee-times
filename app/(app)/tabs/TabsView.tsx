@@ -19,8 +19,10 @@ export type TabPerson = { id: string; name: string; avatarUrl: string | null; ve
 // Opens the Venmo app with the payment (or request) filled in. Venmo has no API for apps to move
 // money between friends, so the person still taps Pay in Venmo; GolfPack can't see that it went
 // through, which is why "Mark settled" stays a separate tap. The note stays neutral on purpose.
-function venmoLink(username: string, cents: number, txn: "pay" | "charge") {
-  const params = new URLSearchParams({ txn, recipients: username, amount: (Math.abs(cents) / 100).toFixed(2), note: "GolfPack tab" });
+// Without their username, Venmo opens with the amount filled in and you pick the person.
+function venmoLink(username: string | null, cents: number, txn: "pay" | "charge") {
+  const params = new URLSearchParams({ txn, amount: (Math.abs(cents) / 100).toFixed(2), note: "GolfPack tab" });
+  if (username) params.set("recipients", username);
   return `venmo://paycharge?${params.toString()}`;
 }
 export type TabEntry = { id: string; otherId: string; cents: number; note: string | null; kind: string; course: string | null; createdAt: string };
@@ -239,7 +241,7 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
         <div className="text-center py-14 px-4">
           <p className="font-medium text-white mb-1">No bets yet</p>
           <p className="text-sm mb-7 leading-relaxed" style={{ color: MUTED }}>
-            Log a bet when someone loses one on the course. GolfPack keeps the running tab, and games with money on them land here too.
+            Log a bet when someone loses one on the course. GolfPack keeps the running tab, games with money on them land here too, and you can pay or request any tab in Venmo.
           </p>
           {people.length > 0 ? (
             <button onClick={() => startAdding()} className="font-semibold px-5 py-2.5 rounded-xl text-sm text-black" style={{ background: GREEN }}>
@@ -293,7 +295,7 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
                       ))}
                     </div>
 
-                    {p.balance !== 0 && p.venmo && (
+                    {p.balance !== 0 && (
                       <div className="mt-3">
                         <a
                           href={venmoLink(p.venmo, p.balance, p.balance < 0 ? "pay" : "charge")}
@@ -303,17 +305,17 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
                         >
                           {p.balance < 0 ? `Pay ${money(p.balance)} in Venmo` : `Request ${money(p.balance)} in Venmo`}
                         </a>
+                        {!p.venmo && (
+                          <p className="text-xs mt-2 px-1" style={{ color: "rgba(255,255,255,0.3)" }}>
+                            {p.name.split(" ")[0]} hasn&apos;t added Venmo to GolfPack, so you&apos;ll pick them in Venmo.
+                          </p>
+                        )}
                         {venmoOpened === p.id && (
                           <p className="text-xs mt-2 px-1" style={{ color: MUTED }}>
                             Once it goes through in Venmo, tap Settle up to clear the tab.
                           </p>
                         )}
                       </div>
-                    )}
-                    {p.balance !== 0 && !p.venmo && (
-                      <p className="text-xs mt-3 px-1" style={{ color: "rgba(255,255,255,0.3)" }}>
-                        {p.name.split(" ")[0]} hasn&apos;t added Venmo yet. It goes on the Profile tab.
-                      </p>
                     )}
 
                     <div className="flex gap-2 mt-3">

@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Building2, Calendar, BarChart3, Bug } from "lucide-react";
+import { Users, Building2, Calendar, BarChart3, Bug, Activity, Bell, Send } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -32,6 +32,7 @@ export default async function AdminDashboard() {
     { count: recentUsers },
     { count: recentTeeTimes },
     { count: openBugReports },
+    { data: activity },
   ] = await Promise.all([
     svc.from("profiles").select("id", { count: "exact", head: true }),
     svc.from("organizations").select("id", { count: "exact", head: true }),
@@ -40,7 +41,13 @@ export default async function AdminDashboard() {
     svc.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     svc.from("tee_times").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     svc.from("bug_reports").select("id", { count: "exact", head: true }).eq("status", "open"),
+    svc.rpc("admin_user_activity"),
   ]);
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activityRows: any[] = activity ?? [];
+  const activeThisWeek = activityRows.filter(a => a.last_seen && new Date(a.last_seen).getTime() >= sevenDaysAgo).length;
+  const pushOn = activityRows.filter(a => a.push_on).length;
   const stats = {
     total_users: totalUsers ?? 0,
     total_orgs: totalOrgs ?? 0,
@@ -55,6 +62,8 @@ export default async function AdminDashboard() {
     { label: "Organizations", value: stats?.total_orgs ?? "—", icon: Building2, sub: null },
     { label: "Tee times", value: stats?.total_tee_times ?? "—", icon: Calendar, sub: `+${stats?.recent_tee_times_30d ?? 0} this month` },
     { label: "Groups", value: stats?.total_groups ?? "—", icon: BarChart3, sub: null },
+    { label: "Active this week", value: activeThisWeek, icon: Activity, sub: `of ${activityRows.length} users` },
+    { label: "Notifications on", value: pushOn, icon: Bell, sub: `of ${activityRows.length} users` },
   ];
 
   return (
@@ -83,7 +92,8 @@ export default async function AdminDashboard() {
           <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
             {[
               { href: "/admin/orgs", label: "Organizations", desc: "View all clubs, manage billing status", badge: null },
-              { href: "/admin/users", label: "Users", desc: "Search users, manage admin access", badge: null },
+              { href: "/admin/users", label: "Users", desc: "Who's active, search, manage admin access", badge: null },
+              { href: "/admin/notify", label: "Send Notification", desc: "Push a message to everyone or pick people", badge: null },
               { href: "/admin/bug-reports", label: "Bug Reports", desc: "User-submitted issues and screenshots", badge: openBugReports ?? 0 },
             ].map((item, i, arr) => (
               <Link
@@ -94,6 +104,7 @@ export default async function AdminDashboard() {
               >
                 <div className="flex items-center gap-3">
                   {item.href === "/admin/bug-reports" && <Bug size={16} style={{ color: "#FF9F0A", flexShrink: 0 }} />}
+                  {item.href === "/admin/notify" && <Send size={16} style={{ color: "#30D158", flexShrink: 0 }} />}
                   <div>
                     <p className="text-sm font-medium text-white">{item.label}</p>
                     <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{item.desc}</p>

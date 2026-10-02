@@ -23,9 +23,28 @@ export async function GET(request: NextRequest) {
     query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`);
   }
 
-  const { data, error: dbErr } = await query;
+  const [{ data, error: dbErr }, { data: activity, error: actErr }] = await Promise.all([
+    query,
+    svc.rpc("admin_user_activity"),
+  ]);
   if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
+  if (actErr) return NextResponse.json({ error: actErr.message }, { status: 500 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byId = new Map((activity ?? []).map((a: any) => [a.user_id, a]));
+  return NextResponse.json((data ?? []).map((p) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a: any = byId.get(p.id) ?? {};
+    return {
+      ...p,
+      last_seen: a.last_seen ?? null,
+      tee_times_created: Number(a.tee_times_created ?? 0),
+      rsvps_answered: Number(a.rsvps_answered ?? 0),
+      rounds_scored: Number(a.rounds_scored ?? 0),
+      group_names: a.group_names ?? null,
+      push_on: Boolean(a.push_on),
+    };
+  }));
 }
 
 export async function PATCH(request: NextRequest) {

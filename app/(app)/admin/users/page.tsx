@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Search, Shield } from "lucide-react";
+import { ChevronLeft, Search, Shield, BellOff } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -17,7 +17,28 @@ type User = {
   email: string;
   is_super_admin: boolean;
   created_at: string;
+  last_seen: string | null;
+  tee_times_created: number;
+  rsvps_answered: number;
+  rounds_scored: number;
+  group_names: string | null;
+  push_on: boolean;
 };
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "never";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 60) return "just now";
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -31,7 +52,12 @@ export default function AdminUsersPage() {
     setLoading(true);
     const url = `/api/admin/users?limit=50${q ? `&search=${encodeURIComponent(q)}` : ""}`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${tok}` } });
-    if (res.ok) setUsers(await res.json());
+    if (res.ok) {
+      const list: User[] = await res.json();
+      // Most recently active first, so "who's using it" reads top-down.
+      list.sort((a, b) => (b.last_seen ?? "").localeCompare(a.last_seen ?? ""));
+      setUsers(list);
+    }
     setLoading(false);
   }, []);
 
@@ -108,6 +134,18 @@ export default function AdminUsersPage() {
                         {u.is_super_admin && <Shield size={12} style={{ color: GOLD }} />}
                       </p>
                       <p className="text-xs mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.35)" }}>{u.email}</p>
+                      <p className="text-xs mt-1.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+                        <span style={{ color: "#30D158" }}>Opened {timeAgo(u.last_seen)}</span>
+                        {" · "}{u.group_names ?? "No group"}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                        {plural(u.tee_times_created, "tee time")} posted · {plural(u.rsvps_answered, "RSVP")} · {plural(u.rounds_scored, "round")} scored
+                      </p>
+                      {!u.push_on && (
+                        <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: "#FF9F0A" }}>
+                          <BellOff size={11} /> Notifications off
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => toggleAdmin(u.id, u.is_super_admin)}

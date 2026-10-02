@@ -14,6 +14,7 @@ import { DeleteRsvpButton } from "@/components/DeleteRsvpButton";
 import { DeleteGuestInviteButton } from "@/components/DeleteGuestInviteButton";
 import { InviteMemberButton } from "@/components/InviteMemberButton";
 import { ShareToggleButton } from "@/components/ShareToggleButton";
+import { TeeWeatherCard } from "@/components/TeeWeather";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -207,6 +208,11 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             </div>
           )}
         </div>
+
+        {/* Weather: future tee times at courses with coordinates; renders nothing on failure */}
+        {!isPast && course?.lat != null && course?.lng != null && (
+          <TeeWeatherCard lat={course.lat} lng={course.lng} teeIso={teeTime.tee_datetime} />
+        )}
 
         {/* Course info card */}
         {course && (course.phone || course.website || course.maps_url) && (

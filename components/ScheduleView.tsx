@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatTeeTime } from "@/lib/format";
+import { TeeWeatherChip } from "@/components/TeeWeather";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -19,6 +20,8 @@ export type ScheduleRow = {
   accepted_count: number;
   my_rsvp: { status: string } | null;
   course_photo: string | null;
+  course_lat: number | null;
+  course_lng: number | null;
 };
 
 function getLocalDateStr(d: Date, tz: string): string {
@@ -276,6 +279,9 @@ export function ScheduleView({ rows, groupTz }: { rows: ScheduleRow[]; groupTz: 
                     {myStatus === "accepted" ? "Going" : myStatus === "declined" ? "Can't go" : "Pending"}
                   </span>
                 </div>
+                {tt.course_lat != null && tt.course_lng != null && (
+                  <TeeWeatherChip lat={tt.course_lat} lng={tt.course_lng} teeIso={tt.tee_datetime} />
+                )}
               </Link>
             );
           })}

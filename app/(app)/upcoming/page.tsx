@@ -54,7 +54,7 @@ export default async function UpcomingPage() {
       const svcInner = createServiceClient();
       let q = svcInner
         .from("tee_times")
-        .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri)")
+        .select("*, rsvps(user_id, status), guest_invites(status), course:courses(photo_uri, lat, lng)")
         .gte("tee_datetime", from)
         .lte("tee_datetime", to)
         .order("tee_datetime", { ascending: true })
@@ -85,7 +85,7 @@ export default async function UpcomingPage() {
     const acceptedCount = tt.rsvps.filter((r: Rsvp) => r.status === "accepted").length;
     const guestAcceptedCount = tt.guest_invites.filter((g: GuestInvite) => g.status === "accepted").length;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const coursePhoto = (tt as any).course?.photo_uri as string | null ?? null;
+    const course = (tt as any).course as { photo_uri: string | null; lat: number | null; lng: number | null } | null;
     return {
       id: tt.id,
       course_name: tt.course_name,
@@ -94,7 +94,9 @@ export default async function UpcomingPage() {
       max_players: tt.max_players,
       accepted_count: acceptedCount + guestAcceptedCount,
       my_rsvp: myRsvp ? { status: myRsvp.status } : null,
-      course_photo: coursePhoto,
+      course_photo: course?.photo_uri ?? null,
+      course_lat: course?.lat ?? null,
+      course_lng: course?.lng ?? null,
     };
   });
 

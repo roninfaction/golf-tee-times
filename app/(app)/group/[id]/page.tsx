@@ -4,6 +4,8 @@ import Link from "next/link";
 import { CopyInviteButton } from "@/components/CopyInviteButton";
 import { GroupPhotoUpload } from "@/components/GroupPhotoUpload";
 import { GroupIntervalPicker } from "@/components/GroupIntervalPicker";
+import { ChevronRight } from "lucide-react";
+import { money } from "@/lib/game";
 import type { GroupMember, Profile } from "@/lib/types";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app";
@@ -53,38 +55,13 @@ export default async function GroupPage({ params }: Params) {
     .eq("group_id", groupId)
     .order("joined_at", { ascending: true });
 
-  // Leaderboard: avg gross/net per member (only shown when ≥5 scores exist in this group)
-  const { count: scoreCount } = await svc
-    .from("round_scores")
-    .select("id", { count: "exact", head: true })
-    .in("tee_time_id",
-      (await svc.from("tee_times").select("id").eq("group_id", groupId)).data?.map((t: { id: string }) => t.id) ?? []
-    );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let leaderboard: any[] = [];
-  if ((scoreCount ?? 0) >= 5) {
-    const teeTimeIds = (await svc.from("tee_times").select("id").eq("group_id", groupId)).data?.map((t: { id: string }) => t.id) ?? [];
-    if (teeTimeIds.length > 0) {
-      const { data: scores } = await svc
-        .from("round_scores")
-        .select("user_id, gross_score, net_score")
-        .in("tee_time_id", teeTimeIds);
-      const byUser = new Map<string, { grossTotal: number; netTotal: number; rounds: number }>();
-      for (const s of scores ?? []) {
-        const cur = byUser.get(s.user_id) ?? { grossTotal: 0, netTotal: 0, rounds: 0 };
-        byUser.set(s.user_id, {
-          grossTotal: cur.grossTotal + s.gross_score,
-          netTotal: cur.netTotal + (s.net_score ?? s.gross_score),
-          rounds: cur.rounds + 1,
-        });
-      }
-      leaderboard = Array.from(byUser.entries())
-        .map(([uid, v]) => ({ user_id: uid, avg_gross: Math.round(v.grossTotal / v.rounds), avg_net: Math.round(v.netTotal / v.rounds), rounds: v.rounds }))
-        .sort((a, b) => a.avg_net - b.avg_net)
-        .slice(0, 10);
-    }
-  }
+  // Side bets: my net across every tab (positive = I'm up). Tabs live on /tabs.
+  const { data: myBets } = await svc
+    .from("side_bets")
+    .select("winner_id, amount_cents")
+    .or(`winner_id.eq.${user.id},loser_id.eq.${user.id}`);
+  const betNet = (myBets ?? []).reduce((sum, b) => sum + (b.winner_id === user.id ? b.amount_cents : -b.amount_cents), 0);
+  const hasBets = (myBets ?? []).length > 0;
 
   // Check if user is an org admin (to show org link)
   let orgName: string | null = null;
@@ -163,6 +140,20 @@ export default async function GroupPage({ params }: Params) {
           </div>
         </div>
 
+        {/* Side bets */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Side bets</p>
+          <Link href="/tabs" className="flex items-center gap-3 px-4 py-3.5 rounded-2xl active:opacity-70 transition-opacity" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium" style={{ color: !hasBets ? "white" : betNet > 0 ? "#30D158" : betNet < 0 ? "#FF453A" : "white" }}>
+                {!hasBets ? "Keep a running tab with friends" : betNet > 0 ? `You're up ${money(betNet)}` : betNet < 0 ? `You're down ${money(betNet)}` : "All square"}
+              </p>
+              {!hasBets && <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.4)" }}>Log who won what. Settle up whenever.</p>}
+            </div>
+            <ChevronRight size={16} style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+          </Link>
+        </div>
+
         {/* Invite link */}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Invite link</p>
@@ -214,37 +205,6 @@ export default async function GroupPage({ params }: Params) {
           </div>
         )}
 
-        {/* Leaderboard — only shown when ≥5 scores exist in this group */}
-        {leaderboard.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>Leaderboard</p>
-            <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-              {leaderboard.map((entry, i) => {
-                const member = (members ?? []).find((m) => m.user_id === entry.user_id);
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const name = (member?.profile as any)?.display_name ?? "Unknown";
-                const isLast = i === leaderboard.length - 1;
-                return (
-                  <div key={entry.user_id} className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
-                    <span className="text-sm font-bold w-5 shrink-0" style={{ color: i === 0 ? GOLD : "rgba(255,255,255,0.3)" }}>
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-medium text-white flex-1 truncate">
-                      {name}{entry.user_id === user.id ? " (you)" : ""}
-                    </span>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold text-white">Avg {entry.avg_gross}</p>
-                      {entry.avg_net !== entry.avg_gross && (
-                        <p className="text-xs" style={{ color: "#30D158" }}>Net {entry.avg_net}</p>
-                      )}
-                      <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>{entry.rounds} rounds</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

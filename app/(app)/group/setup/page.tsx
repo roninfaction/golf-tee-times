@@ -1,14 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Share2, Copy, Check } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/browser";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app";
 
 export default function GroupSetupPage() {
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Set once the group exists: the next step is getting people into it, not an empty schedule.
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function shareInvite() {
+    if (!inviteUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: groupName, text: `Join ${groupName} on GolfPack so you see our tee times.`, url: inviteUrl });
+        return;
+      } catch {
+        // Share sheet dismissed: the copy button is right there.
+      }
+    }
+    await copyInvite();
+  }
+
+  async function copyInvite() {
+    if (!inviteUrl) return;
+    await navigator.clipboard.writeText(inviteUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
 
   async function createGroup(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +50,8 @@ export default function GroupSetupPage() {
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
-        window.location.href = "/upcoming";
+        setInviteUrl(body.invite_code ? `${APP_URL}/invite/${body.invite_code}` : null);
+        if (!body.invite_code) window.location.href = "/upcoming";
       } else {
         setError(body.error ?? `Error ${res.status}`);
       }
@@ -34,6 +60,48 @@ export default function GroupSetupPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (inviteUrl) {
+    return (
+      <div className="min-h-screen pb-52">
+        <div className="px-4 pt-12 pb-5" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
+          <h1 className="text-[17px] font-semibold text-white text-center">Add your crew</h1>
+        </div>
+        <div className="px-4 pt-8 space-y-4">
+          <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
+            <span className="text-white font-semibold">{groupName}</span> is ready. Text your friends the invite link so they see your tee times and can say they&apos;re in.
+          </p>
+          <div className="rounded-xl px-3 py-2.5" style={{ background: "rgba(201,168,76,0.10)", border: "0.5px solid rgba(201,168,76,0.22)" }}>
+            <p className="text-xs font-mono break-all" style={{ color: "#C9A84C" }}>{inviteUrl}</p>
+          </div>
+          <button
+            onClick={shareInvite}
+            className="w-full py-4 rounded-2xl text-base font-semibold text-black flex items-center justify-center gap-2"
+            style={{ background: "#30D158" }}
+          >
+            <Share2 size={18} /> Send the invite
+          </button>
+          <button
+            onClick={copyInvite}
+            className="w-full py-3 rounded-2xl text-sm font-semibold flex items-center justify-center gap-2"
+            style={{ background: "rgba(255,255,255,0.07)", color: copied ? "#30D158" : "rgba(255,255,255,0.7)" }}
+          >
+            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Link copied" : "Copy link"}
+          </button>
+          <button
+            onClick={() => { window.location.href = "/upcoming"; }}
+            className="w-full py-3 text-sm font-medium"
+            style={{ color: "rgba(255,255,255,0.45)" }}
+          >
+            Done, take me to the schedule
+          </button>
+          <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.3)" }}>
+            The link also lives on your Group tab.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

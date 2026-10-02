@@ -3,11 +3,12 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { extractGroupScores } from "@/lib/score-ocr";
 import { parseBody } from "@/lib/parse-body";
+import { canManageGame } from "@/lib/game-access";
 
 type Params = { params: Promise<{ id: string }> };
 
 // POST /api/tee-times/[id]/scores/ocr-group
-// Creator-only. Scans one scorecard photo and returns gross scores matched to all players.
+// Anyone running the round's game. Scans one scorecard photo and returns gross scores matched to all players.
 // Also returns each player's handicap_index from their profile so the UI can pre-fill net scores.
 export async function POST(request: NextRequest, { params }: Params) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
@@ -36,9 +37,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "You've scanned 20 scorecards today — enter any remaining scores manually" }, { status: 429 });
   }
 
-  // Creator only
-  const { data: tt } = await svc.from("tee_times").select("created_by").eq("id", teeTimeId).single();
-  if (!tt || tt.created_by !== user.id) return NextResponse.json({ error: "Creator only" }, { status: 403 });
+  const { tt, allowed } = await canManageGame(svc, teeTimeId, user.id);
+  if (!tt) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!allowed) return NextResponse.json({ error: "Only players in this round can scan its scorecard" }, { status: 403 });
 
   // Fetch all accepted players: rsvps + guests
   const [{ data: rsvps }, { data: guests }] = await Promise.all([

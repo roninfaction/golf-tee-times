@@ -65,20 +65,6 @@ export default async function PastPage({
 
   const { data: teeTimes } = await teeTimesQuery;
 
-  // Batch-fetch user's scores for visible tee times
-  const teeTimeIds = (teeTimes ?? []).map((tt: { id: string }) => tt.id);
-  const scoresByTeeTime = new Map<string, { gross_score: number; net_score: number | null }>();
-  if (teeTimeIds.length > 0) {
-    const { data: myScores } = await svc
-      .from("round_scores")
-      .select("tee_time_id, gross_score, net_score")
-      .eq("user_id", user.id)
-      .in("tee_time_id", teeTimeIds);
-    for (const s of myScores ?? []) {
-      scoresByTeeTime.set(s.tee_time_id, { gross_score: s.gross_score, net_score: s.net_score });
-    }
-  }
-
   return (
     <div className="min-h-screen pb-52">
       <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
@@ -99,7 +85,6 @@ export default async function PastPage({
                 tt.rsvps.filter((r: Rsvp) => r.status === "accepted").length +
                 tt.guest_invites.filter((g: GuestInvite) => g.status === "accepted").length;
               const isLast = i === teeTimes.length - 1;
-              const score = scoresByTeeTime.get(tt.id);
 
               return (
                 <Link
@@ -115,15 +100,7 @@ export default async function PastPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-2 ml-3 shrink-0">
-                    {score && (
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-white">{score.gross_score}</p>
-                        {score.net_score !== null && score.net_score !== score.gross_score && (
-                          <p className="text-xs" style={{ color: "#30D158" }}>Net {score.net_score}</p>
-                        )}
-                      </div>
-                    )}
-                    {myRsvp && !score && (
+                    {myRsvp && (
                       <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
                         style={myRsvp.status === "accepted"
                           ? { background: "rgba(48,209,88,0.12)", color: "#30D158" }

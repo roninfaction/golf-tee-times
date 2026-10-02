@@ -30,8 +30,8 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const teeTimeId = event.notification.data && event.notification.data.teeTimeId;
-  const url = teeTimeId ? "/tee-times/" + teeTimeId : "/upcoming";
+  const data = event.notification.data || {};
+  const url = data.url ? data.url : data.teeTimeId ? "/tee-times/" + data.teeTimeId : "/upcoming";
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then((clients) => {
       const match = clients.find((c) => c.url.indexOf(self.location.origin) !== -1);

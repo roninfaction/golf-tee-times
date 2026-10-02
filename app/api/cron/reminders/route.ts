@@ -38,10 +38,11 @@ export async function POST(request: NextRequest) {
 
     const teeTimeIds = teeTimes.map((tt: { id: string }) => tt.id);
 
-    // Batch: RSVPs for push notifications
+    // Batch: RSVPs for push notifications. Confirmed players get the reminder; people who
+    // haven't answered get asked instead (day before only, the 2-hour one is for players).
     const { data: allRsvps } = await svc
       .from("rsvps")
-      .select("tee_time_id, user_id")
+      .select("tee_time_id, user_id, status")
       .in("tee_time_id", teeTimeIds)
       .in("status", ["accepted", "pending"]);
 
@@ -63,10 +64,10 @@ export async function POST(request: NextRequest) {
       .not("guest_email", "is", null);
 
     // Build lookup maps
-    const rsvpsByTeeTime = new Map<string, string[]>();
-    for (const r of (allRsvps ?? []) as { tee_time_id: string; user_id: string }[]) {
+    const rsvpsByTeeTime = new Map<string, { user_id: string; status: string }[]>();
+    for (const r of (allRsvps ?? []) as { tee_time_id: string; user_id: string; status: string }[]) {
       const list = rsvpsByTeeTime.get(r.tee_time_id) ?? [];
-      list.push(r.user_id);
+      list.push(r);
       rsvpsByTeeTime.set(r.tee_time_id, list);
     }
     const pushByUserId = new Map<string, unknown>();
@@ -89,18 +90,33 @@ export async function POST(request: NextRequest) {
       const dateStr = teeDate.toLocaleDateString("en-US", { timeZone: tz, weekday: "long", month: "long", day: "numeric" });
 
       // Push notifications for app members
-      const userIds = rsvpsByTeeTime.get(tt.id) ?? [];
-      const subscriptions = userIds.map(uid => pushByUserId.get(uid)).filter(Boolean);
-      if (subscriptions.length > 0) {
+      const rsvpsHere = rsvpsByTeeTime.get(tt.id) ?? [];
+      const subsFor = (status: string) => rsvpsHere
+        .filter(r => r.status === status)
+        .map(r => pushByUserId.get(r.user_id))
+        .filter(Boolean) as import("@/lib/web-push-server").PushSubscription[];
+
+      const playing = subsFor("accepted");
+      const undecided = sentFlag === "reminder_24h_sent" ? subsFor("pending") : [];
+      if (playing.length > 0) {
         const { expiredEndpoints } = await sendPush({
-          subscriptions: subscriptions as import("@/lib/web-push-server").PushSubscription[],
+          subscriptions: playing,
           title: `Tee time ${label}! ⛳`,
           body: `${tt.course_name} · ${timeStr}`,
           data: { teeTimeId: tt.id },
         });
         await clearExpiredPushSubscriptions(expiredEndpoints);
-        sent++;
       }
+      if (undecided.length > 0) {
+        const { expiredEndpoints } = await sendPush({
+          subscriptions: undecided,
+          title: "Are you in? ⛳",
+          body: `${tt.course_name} · ${label} at ${timeStr}. Tap to answer.`,
+          data: { teeTimeId: tt.id },
+        });
+        await clearExpiredPushSubscriptions(expiredEndpoints);
+      }
+      if (playing.length > 0 || undecided.length > 0) sent++;
 
       // Email reminders for guests who provided an email
       const guests = guestsByTeeTime.get(tt.id) ?? [];

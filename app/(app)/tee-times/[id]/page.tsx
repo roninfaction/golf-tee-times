@@ -5,15 +5,13 @@ import { RsvpButtons } from "@/components/RsvpButtons";
 import { InviteGuestButton } from "@/components/InviteGuestButton";
 import { InviteGroupButton } from "@/components/InviteGroupButton";
 import { DeleteTeeTimeButton } from "@/components/DeleteTeeTimeButton";
-import { ChevronLeft, Flag, Hash, FileText, Phone, Globe, MapPin, Link2 } from "lucide-react";
+import { ChevronLeft, Flag, Hash, FileText, Phone, Globe, MapPin, Link2, CalendarPlus } from "lucide-react";
 import Link from "next/link";
 import type { TeeTime, Rsvp, GuestInvite, Profile, Course } from "@/lib/types";
-import { ScoreSection } from "@/components/ScoreSection";
-import { TeamPlaySection } from "@/components/TeamPlaySection";
+import { GameSection, type GamePlayerWithHcp, type SavedScore } from "@/components/GameSection";
 import { DeleteRsvpButton } from "@/components/DeleteRsvpButton";
 import { DeleteGuestInviteButton } from "@/components/DeleteGuestInviteButton";
 import { InviteMemberButton } from "@/components/InviteMemberButton";
-import { ShareToggleButton } from "@/components/ShareToggleButton";
 import { TeeWeatherCard } from "@/components/TeeWeather";
 
 const GOLD = "#C9A84C";
@@ -107,7 +105,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
   const groupTz = (teeTime as TeeTime & { group?: { timezone?: string } } & { rsvps: (Rsvp & { profile: Profile })[]; guest_invites: GuestInvite[] }).group?.timezone ?? "America/Los_Angeles";
   const isPast = new Date(teeTime.tee_datetime) < new Date();
-  // Show scores any time on the day of the tee time or later (not just after the exact start time)
+  // Score entry opens on the day of the tee time (not just after the exact start time)
   const teeDateStr = new Date(teeTime.tee_datetime).toLocaleDateString("en-CA", { timeZone: groupTz });
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: groupTz });
   const isTodayOrPast = teeDateStr <= todayStr;
@@ -118,6 +116,41 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
   const pendingGuests = teeTime.guest_invites.filter((g) => g.status === "pending");
   const totalAccepted = acceptedGroup.length + acceptedGuests.length;
   const openSpots = Math.max(0, teeTime.max_players - totalAccepted);
+
+  const undecidedCount = teeTime.rsvps.filter((r) => r.status === "pending").length;
+
+  // Game: anyone playing, the organizer, or a group admin can run it.
+  const canManageGame = teeTime.created_by === user.id || myRsvp?.status === "accepted" || isGroupAdmin;
+  const gamePlayers: GamePlayerWithHcp[] = [
+    ...acceptedGroup.map((r) => ({
+      key: `u:${r.user_id}`, userId: r.user_id, guestId: null,
+      name: r.profile?.display_name ?? "Player",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      teamId: (r as any).team_id ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handicap: (r.profile as any)?.ghin_handicap_index ?? null,
+    })),
+    ...acceptedGuests.map((g) => ({
+      key: `g:${g.id}`, userId: null, guestId: g.id,
+      name: g.accepted_name ?? g.invitee_name ?? "Guest",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      teamId: (g as any).team_id ?? null,
+      handicap: null,
+    })),
+  ];
+  const [{ data: scoreRows }, { data: gameBets }] = await Promise.all([
+    svc.from("round_scores")
+      .select("id, user_id, guest_invite_id, gross_score, handicap_used, hole_scores, scorecard_image_url")
+      .eq("tee_time_id", id),
+    svc.from("side_bets").select("winner_id, loser_id, amount_cents").eq("tee_time_id", id).eq("kind", "game"),
+  ]);
+  const nameById = new Map(teeTime.rsvps.map((r) => [r.user_id, r.profile?.display_name ?? "Player"]));
+  const settledLines = (gameBets ?? []).map((b) => ({
+    winnerName: nameById.get(b.winner_id) ?? "Player",
+    loserName: nameById.get(b.loser_id) ?? "Player",
+    cents: b.amount_cents,
+  }));
+  const ttGame = teeTime as TeeTime & { format?: string | null; stake_cents?: number | null };
 
   const backHref = isPast ? "/past" : "/upcoming";
 
@@ -186,7 +219,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
         {/* Details card */}
         <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
-          <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: (teeTime.confirmation_number || teeTime.notes) ? `0.5px solid ${DIVIDER}` : "none" }}>
+          <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: (teeTime.confirmation_number || teeTime.notes || (!isPast && myRsvp?.status === "accepted")) ? `0.5px solid ${DIVIDER}` : "none" }}>
             <Flag size={15} style={{ color: GOLD, flexShrink: 0 }} />
             <span className="text-sm text-white">
               {teeTime.holes} holes
@@ -196,16 +229,22 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             </span>
           </div>
           {teeTime.confirmation_number && (
-            <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: teeTime.notes ? `0.5px solid ${DIVIDER}` : "none" }}>
+            <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: (teeTime.notes || (!isPast && myRsvp?.status === "accepted")) ? `0.5px solid ${DIVIDER}` : "none" }}>
               <Hash size={15} style={{ color: GOLD, flexShrink: 0 }} />
               <span className="text-sm text-white font-mono">{teeTime.confirmation_number}</span>
             </div>
           )}
           {teeTime.notes && (
-            <div className="flex items-start gap-3 px-4 py-3.5">
+            <div className="flex items-start gap-3 px-4 py-3.5" style={{ borderBottom: !isPast && myRsvp?.status === "accepted" ? `0.5px solid ${DIVIDER}` : "none" }}>
               <FileText size={15} style={{ color: GOLD, flexShrink: 0, marginTop: 1 }} />
               <span className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>{teeTime.notes}</span>
             </div>
+          )}
+          {!isPast && myRsvp?.status === "accepted" && (
+            <a href={`/api/tee-times/${teeTime.id}/calendar`} className="flex items-center gap-3 px-4 py-3.5 active:opacity-70 transition-opacity">
+              <CalendarPlus size={15} style={{ color: GOLD, flexShrink: 0 }} />
+              <span className="text-sm text-white">Add to calendar</span>
+            </a>
           )}
         </div>
 
@@ -269,9 +308,16 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
         {/* Attendees */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide mb-2 px-1" style={{ color: GOLD }}>
-            {isPast ? "Who played" : "Who's going"}
-          </p>
+          <div className="flex items-baseline justify-between mb-2 px-1">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: GOLD }}>
+              {isPast ? "Who played" : "Who's going"}
+            </p>
+            {!isPast && undecidedCount > 0 && (
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                {`${undecidedCount} ${undecidedCount === 1 ? "hasn't" : "haven't"} answered`}
+              </p>
+            )}
+          </div>
           <div className="rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
             {teeTime.rsvps.map((rsvp, i) => {
               const cfg = statusConfig[rsvp.status];
@@ -362,35 +408,6 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Team play — future tee times with ≥4 confirmed or invited */}
-        {teeTime.max_players >= 4 && (
-          <TeamPlaySection
-            teeTimeId={teeTime.id}
-            isCreator={teeTime.created_by === user.id}
-            currentFormat={(teeTime as TeeTime & { format?: string | null }).format ?? null}
-            rsvps={[
-              ...teeTime.rsvps.map(r => ({
-                id: r.id,
-                user_id: r.user_id,
-                status: r.status,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                profile: { display_name: r.profile?.display_name ?? "?", avatar_url: (r.profile as any)?.avatar_url ?? null },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                team_id: (r as any).team_id ?? null,
-              })),
-              ...teeTime.guest_invites.filter(g => g.status === "accepted").map(g => ({
-                id: g.id,
-                user_id: "",
-                status: "accepted" as const,
-                profile: { display_name: g.accepted_name ?? g.invitee_name ?? "Guest", avatar_url: null },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                team_id: (g as any).team_id ?? null,
-                is_guest: true,
-              })),
-            ]}
-          />
-        )}
-
         {/* Invite Group — creator only, future tee times */}
         {!isPast && teeTime.created_by === user.id && (
           <InviteGroupButton teeTimeId={teeTime.id} />
@@ -409,6 +426,23 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
         {!isPast && openSpots > 0 && (
           <InviteGuestButton teeTimeId={teeTime.id} openSpots={openSpots} />
         )}
+
+        {/* Game: optional teams, stakes and scores. Hidden entirely unless someone sets one up. */}
+        <GameSection
+          teeTimeId={teeTime.id}
+          userId={user.id}
+          canManage={canManageGame}
+          isTodayOrPast={isTodayOrPast}
+          holes={teeTime.holes}
+          format={ttGame.format ?? null}
+          stakeCents={ttGame.stake_cents ?? null}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          teams={((teeTime as any).tee_time_teams ?? []).sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))}
+          players={gamePlayers}
+          scores={(scoreRows ?? []) as SavedScore[]}
+          settled={settledLines}
+          shareUrl={`https://golfpack.app/share/${teeTime.id}`}
+        />
 
         {/* Delete — creator only */}
         {teeTime.created_by === user.id && (
@@ -458,44 +492,6 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Share results — creator only, past/today tee times */}
-        {isTodayOrPast && teeTime.created_by === user.id && (
-          <ShareToggleButton
-            teeTimeId={teeTime.id}
-            initialIsShareable={(teeTime as TeeTime & { is_shareable?: boolean }).is_shareable ?? false}
-            shareUrl={`https://golfpack.app/share/${teeTime.id}`}
-          />
-        )}
-
-        {/* Score section — day-of or past tee times where user played */}
-        {isTodayOrPast && myRsvp?.status === "accepted" && (
-          <ScoreSection
-            teeTimeId={teeTime.id}
-            userId={user.id}
-            isCreator={teeTime.created_by === user.id}
-            isGroupAdmin={isGroupAdmin}
-            format={(teeTime as TeeTime & { format?: string | null }).format ?? null}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            teams={(teeTime as any).tee_time_teams ?? []}
-            rsvps={teeTime.rsvps.map(r => ({
-              id: r.id,
-              user_id: r.user_id,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              team_id: (r as any).team_id ?? null,
-              display_name: r.profile?.display_name ?? "?",
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              handicap_index: (r.profile as any)?.ghin_handicap_index ?? null,
-            }))}
-            guests={teeTime.guest_invites
-              .filter(g => g.status === "accepted")
-              .map(g => ({
-                id: g.id,
-                accepted_name: g.accepted_name ?? g.invitee_name ?? "Guest",
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                team_id: (g as any).team_id ?? null,
-              }))}
-          />
-        )}
       </div>
     </div>
   );

@@ -109,6 +109,7 @@ export function FillSpotClient({ token, data, groupTz, loggedInUser: serverLogge
       description: `Tee time with ${data.group_name}`,
       location: data.course?.address ?? data.teeTime.course_name,
       startIso: data.teeTime.tee_datetime,
+      uid: data.teeTimeId,
     });
     const blob = new Blob([ics], { type: "text/calendar" });
     const url = URL.createObjectURL(blob);

@@ -116,10 +116,12 @@ export function DigitalScorecard({
   teams,
   scores,
   onSaved,
+  readOnly = false,
 }: {
   teeTimeId: string;
   userId: string;
   canEditOthers: boolean;
+  readOnly?: boolean;
   format: string | null;
   teams: Team[];
   scores: ScoreCardRow[];
@@ -465,7 +467,7 @@ export function DigitalScorecard({
 
                   {/* Player rows */}
                   {group.rows.map((score, ri) => {
-                    const editable = score.user_id === userId || canEditOthers;
+                    const editable = !readOnly && (score.user_id === userId || canEditOthers);
                     const isSaving = saving.has(score.id);
                     const shortName = score.user_id === userId
                       ? "You"
@@ -720,7 +722,7 @@ export function DigitalScorecard({
             })}
 
             {/* Hint when no holes are filled yet */}
-            {scores.every(s => !s.hole_scores || Object.keys(s.hole_scores).length === 0) && (
+            {!readOnly && scores.every(s => !s.hole_scores || Object.keys(s.hole_scores).length === 0) && (
               <div
                 className="px-4 py-3 text-xs"
                 style={{ color: "rgba(255,255,255,0.18)", borderTop: `0.5px solid ${DIVIDER}` }}

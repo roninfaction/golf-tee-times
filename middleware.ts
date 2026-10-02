@@ -57,6 +57,7 @@ export async function middleware(request: NextRequest) {
     "/api/push",                  // uses Bearer token auth, not cookies
     "/api/guest-invites",         // uses Bearer token auth, not cookies
     "/api/app-invites",           // uses Bearer token auth, not cookies
+    "/api/side-bets",             // uses Bearer token auth, not cookies
     "/share",                     // public shareable results pages
   ];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));

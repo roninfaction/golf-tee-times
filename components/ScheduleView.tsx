@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/browser";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatTeeTime } from "@/lib/format";
 import { TeeWeatherChip } from "@/components/TeeWeather";
@@ -69,7 +71,65 @@ function getMonthDays(year: number, month: number): (string | null)[] {
   });
 }
 
-export function ScheduleView({ rows, groupTz }: { rows: ScheduleRow[]; groupTz: string }) {
+// Answer an invite straight from the card. The card flips once the save lands; on failure the
+// buttons stay with a note to retry.
+function QuickRsvp({ teeTimeId, onAnswered }: { teeTimeId: string; onAnswered: (status: "accepted" | "declined") => void }) {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function answer(status: "accepted" | "declined") {
+    setSaving(true);
+    setFailed(false);
+    const { data: { session } } = await createClient().auth.getSession();
+    const res = await fetch("/api/rsvps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+      body: JSON.stringify({ teeTimeId, status }),
+    }).catch(() => null);
+    setSaving(false);
+    if (!res?.ok) {
+      setFailed(true);
+      return;
+    }
+    onAnswered(status);
+    router.refresh();
+  }
+
+  return (
+    <div className="px-4 pb-4 -mt-1">
+      <div className="flex gap-2">
+        <button
+          onClick={() => answer("accepted")}
+          disabled={saving}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-black active:opacity-70"
+          style={{ background: "#30D158", opacity: saving ? 0.6 : 1 }}
+        >
+          I&apos;m in
+        </button>
+        <button
+          onClick={() => answer("declined")}
+          disabled={saving}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold active:opacity-70"
+          style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.7)", opacity: saving ? 0.6 : 1 }}
+        >
+          Can&apos;t make it
+        </button>
+      </div>
+      {failed && <p className="text-xs mt-2" style={{ color: "#FF453A" }}>That didn&apos;t save. Check your connection and tap again.</p>}
+    </div>
+  );
+}
+
+export function ScheduleView({ rows: serverRows, groupTz }: { rows: ScheduleRow[]; groupTz: string }) {
+  // Quick answers show right away. Each one only applies until the refreshed server row agrees,
+  // so the going count is never bumped twice.
+  const [answered, setAnswered] = useState<Record<string, "accepted" | "declined">>({});
+  const rows = useMemo(() => serverRows.map(r => {
+    const a = answered[r.id];
+    if (!a || r.my_rsvp?.status === a) return r;
+    return { ...r, my_rsvp: { status: a }, accepted_count: r.accepted_count + (a === "accepted" ? 1 : 0) };
+  }), [serverRows, answered]);
   const [view, setView] = useState<"week" | "month">("week");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [monthOffset, setMonthOffset] = useState(0);
@@ -248,11 +308,14 @@ export function ScheduleView({ rows, groupTz }: { rows: ScheduleRow[]; groupTz: 
               ? { background: "rgba(255,69,58,0.12)", color: "#FF453A" }
               : { background: "rgba(201,168,76,0.15)", color: GOLD };
             return (
-              <Link
+              <div
                 key={tt.id}
-                href={`/tee-times/${tt.id}`}
-                className="block rounded-2xl overflow-hidden transition-opacity active:opacity-70"
+                className="rounded-2xl overflow-hidden"
                 style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}
+              >
+              <Link
+                href={`/tee-times/${tt.id}`}
+                className="block transition-opacity active:opacity-70"
               >
                 {tt.course_photo && (
                   <div className="relative h-28 w-full">
@@ -283,6 +346,10 @@ export function ScheduleView({ rows, groupTz }: { rows: ScheduleRow[]; groupTz: 
                   <TeeWeatherChip lat={tt.course_lat} lng={tt.course_lng} teeIso={tt.tee_datetime} />
                 )}
               </Link>
+              {myStatus === "pending" && (
+                <QuickRsvp teeTimeId={tt.id} onAnswered={status => setAnswered(prev => ({ ...prev, [tt.id]: status }))} />
+              )}
+              </div>
             );
           })}
         </div>

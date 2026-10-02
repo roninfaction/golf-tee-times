@@ -44,19 +44,28 @@ export function formatDaysUntil(isoString: string, tz = DEFAULT_TZ): string {
   return formatTeeDate(isoString, tz);
 }
 
-// Build a .ics calendar file content string — time anchored to Pacific timezone
+// ICS text values must escape backslash, comma, semicolon and newlines, or calendar apps cut
+// an address like "5880 Woodcreek Oaks Blvd, Roseville" off at the first comma.
+function icsText(v: string): string {
+  return v.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+}
+
+// Build a .ics calendar file content string — time anchored to Pacific timezone.
+// Pass a stable uid (the tee time id) so adding the same round twice updates it, not duplicates it.
 export function buildIcsContent({
   summary,
   description,
   location,
   startIso,
   durationHours = 4,
+  uid,
 }: {
   summary: string;
   description: string;
   location: string;
   startIso: string;
   durationHours?: number;
+  uid?: string;
 }): string {
   const startLocal = utcIsoToPacificIcsLocal(startIso);
   const endMs = new Date(startIso).getTime() + durationHours * 60 * 60 * 1000;
@@ -69,10 +78,11 @@ export function buildIcsContent({
     "BEGIN:VEVENT",
     `DTSTART;TZID=America/Los_Angeles:${startLocal}`,
     `DTEND;TZID=America/Los_Angeles:${endLocal}`,
-    `SUMMARY:${summary}`,
-    `DESCRIPTION:${description}`,
-    `LOCATION:${location}`,
-    `UID:${Date.now()}@golfpack`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`,
+    `SUMMARY:${icsText(summary)}`,
+    `DESCRIPTION:${icsText(description)}`,
+    `LOCATION:${icsText(location)}`,
+    `UID:${uid ?? Date.now()}@golfpack`,
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");

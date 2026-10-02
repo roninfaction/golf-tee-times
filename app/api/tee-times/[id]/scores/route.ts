@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserFromBearer } from "@/lib/auth-bearer";
 import { parseBody } from "@/lib/parse-body";
+import { canManageGame } from "@/lib/game-access";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   return NextResponse.json(data ?? []);
 }
 
-// POST /api/tee-times/[id]/scores — upsert a score for the authenticated user (or a guest, creator only)
+// POST /api/tee-times/[id]/scores — upsert a score for the authenticated user, or for anyone
+// on the round (member or guest) when the caller can run the round's game.
 export async function POST(request: NextRequest, { params }: Params) {
   const user = await getUserFromBearer(request.headers.get("Authorization"));
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,14 +34,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { body, badRequest } = await parseBody<any>(request);
   if (badRequest) return badRequest;
-  const { gross_score, handicap_used, scorecard_image_url, source, notes, guest_invite_id, hole_scores } = body;
-
-  if (!gross_score || gross_score < 50 || gross_score > 180) {
-    return NextResponse.json({ error: "gross_score must be between 50 and 180" }, { status: 400 });
-  }
+  const { handicap_used, scorecard_image_url, source, notes, guest_invite_id, hole_scores } = body;
+  let { gross_score } = body;
 
   // hole_scores is an object keyed by hole number, e.g. {"1": 4, "2": 5} — matches the OCR
-  // output and every consumer (share page, ScoreSection, DigitalScorecard) which read it as such.
+  // output and every consumer (share page, GameSection, DigitalScorecard) which read it as such.
   if (hole_scores !== undefined && hole_scores !== null) {
     if (typeof hole_scores !== "object" || Array.isArray(hole_scores)) {
       return NextResponse.json({ error: "hole_scores must be an object keyed by hole number" }, { status: 400 });
@@ -57,22 +56,25 @@ export async function POST(request: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Each hole score must be a whole number between 1 and 20" }, { status: 400 });
       }
     }
+    // Hole-by-hole entry sends no total; the total is the holes added up.
+    if (!gross_score && entries.length > 0) {
+      gross_score = entries.reduce((sum, [, strokes]) => sum + (strokes as number), 0);
+    }
+  }
+
+  // 18 covers a 9-hole round; the old 50 floor rejected real 9-hole totals.
+  if (!gross_score || gross_score < 18 || gross_score > 180) {
+    return NextResponse.json({ error: "gross_score must be between 18 and 180" }, { status: 400 });
   }
 
   const svc = createServiceClient();
 
   if (guest_invite_id) {
-    // Creator or group admin: post score on behalf of a guest
-    const { data: tt } = await svc.from("tee_times").select("created_by, group_id").eq("id", teeTimeId).single();
+    // Someone running the game posts a guest's score
+    const { tt, allowed } = await canManageGame(svc, teeTimeId, user.id);
     if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
-    const isCreator = tt.created_by === user.id;
-    let isGroupAdmin = false;
-    if (!isCreator) {
-      const { data: gm } = await svc.from("group_members").select("role").eq("group_id", tt.group_id).eq("user_id", user.id).maybeSingle();
-      isGroupAdmin = gm?.role === "admin";
-    }
-    if (!isCreator && !isGroupAdmin) {
-      return NextResponse.json({ error: "Only the creator or a group admin can post scores for guests" }, { status: 403 });
+    if (!allowed) {
+      return NextResponse.json({ error: "Only players in this round can post scores for guests" }, { status: 403 });
     }
 
     const { data: invite } = await svc
@@ -105,21 +107,15 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { target_user_id } = body;
 
-  // Creator or group admin posting/editing a score on behalf of another member
+  // Someone running the game posting/editing a score on behalf of another member
   if (target_user_id && target_user_id !== user.id) {
-    const { data: tt } = await svc.from("tee_times").select("created_by, group_id").eq("id", teeTimeId).single();
-    if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
-
-    const isCreator = tt.created_by === user.id;
-    const [{ data: rsvp }, { data: gm }] = await Promise.all([
+    const [{ tt, allowed }, { data: rsvp }] = await Promise.all([
+      canManageGame(svc, teeTimeId, user.id),
       svc.from("rsvps").select("id").eq("tee_time_id", teeTimeId).eq("user_id", target_user_id).maybeSingle(),
-      isCreator
-        ? Promise.resolve({ data: null })
-        : svc.from("group_members").select("role").eq("group_id", tt.group_id).eq("user_id", user.id).maybeSingle(),
     ]);
-    const isGroupAdmin = gm?.role === "admin";
-    if (!isCreator && !isGroupAdmin) {
-      return NextResponse.json({ error: "Only the creator or a group admin can post scores for other members" }, { status: 403 });
+    if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
+    if (!allowed) {
+      return NextResponse.json({ error: "Only players in this round can post scores for other members" }, { status: 403 });
     }
     if (!rsvp) {
       return NextResponse.json({ error: "Member is not on this tee time" }, { status: 404 });
@@ -169,4 +165,24 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
+}
+
+// DELETE /api/tee-times/[id]/scores — remove a score entered by mistake (someone who didn't play)
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const user = await getUserFromBearer(request.headers.get("Authorization"));
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: teeTimeId } = await params;
+  const { body, badRequest } = await parseBody<{ score_id: string }>(request);
+  if (badRequest) return badRequest;
+  if (!body.score_id) return NextResponse.json({ error: "score_id required" }, { status: 400 });
+
+  const svc = createServiceClient();
+  const { tt, allowed } = await canManageGame(svc, teeTimeId, user.id);
+  if (!tt) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
+  if (!allowed) return NextResponse.json({ error: "Only players in this round can remove scores" }, { status: 403 });
+
+  const { error } = await svc.from("round_scores").delete().eq("id", body.score_id).eq("tee_time_id", teeTimeId);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }

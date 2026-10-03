@@ -49,7 +49,9 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy .open-next/assets --project-name=${{ github.ref_name == 'main' && 'golf-tee-times' || 'golf-tee-times-staging' }} --commit-dirty=true
+          # --branch is explicit for main: left to itself wrangler guesses the branch from git, and a
+          # merge commit that is also the tip of a feature branch went to that branch's preview instead.
+          command: pages deploy .open-next/assets --project-name=${{ github.ref_name == 'main' && 'golf-tee-times' || 'golf-tee-times-staging' }} --commit-dirty=true ${{ github.ref_name == 'main' && '--branch=main' || '' }}
 
       - name: Deploy cron worker
         uses: cloudflare/wrangler-action@v3

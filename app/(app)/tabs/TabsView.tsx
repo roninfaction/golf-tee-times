@@ -357,7 +357,7 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
 
       {listed.length > 0 && (
         <p className="text-xs text-center mt-4 px-6 leading-relaxed" style={{ color: "rgba(255,255,255,0.25)" }}>
-          Only you and the other person can see a tab. Settling up keeps the history.
+          Friends only see the tabs they&apos;re part of. Settling up keeps the history.
         </p>
       )}
     </div>

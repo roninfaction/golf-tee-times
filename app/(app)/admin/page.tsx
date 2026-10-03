@@ -1,7 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Users, Building2, Calendar, BarChart3, Bug, Activity, Bell, Send } from "lucide-react";
+import { Users, Building2, Calendar, BarChart3, Bug, Activity, Bell, Send, DollarSign } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const CARD_BG = "rgba(255,255,255,0.055)";
@@ -94,6 +94,7 @@ export default async function AdminDashboard() {
               { href: "/admin/orgs", label: "Organizations", desc: "View all clubs, manage billing status", badge: null },
               { href: "/admin/users", label: "Users", desc: "Who's active, search, manage admin access", badge: null },
               { href: "/admin/notify", label: "Send Notification", desc: "Push a message to everyone or pick people", badge: null },
+              { href: "/admin/side-bets", label: "Side bets", desc: "Who owes who and every logged bet", badge: null },
               { href: "/admin/bug-reports", label: "Bug Reports", desc: "User-submitted issues and screenshots", badge: openBugReports ?? 0 },
             ].map((item, i, arr) => (
               <Link
@@ -105,6 +106,7 @@ export default async function AdminDashboard() {
                 <div className="flex items-center gap-3">
                   {item.href === "/admin/bug-reports" && <Bug size={16} style={{ color: "#FF9F0A", flexShrink: 0 }} />}
                   {item.href === "/admin/notify" && <Send size={16} style={{ color: "#30D158", flexShrink: 0 }} />}
+                  {item.href === "/admin/side-bets" && <DollarSign size={16} style={{ color: GOLD, flexShrink: 0 }} />}
                   <div>
                     <p className="text-sm font-medium text-white">{item.label}</p>
                     <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{item.desc}</p>

@@ -31,8 +31,9 @@ jobs:
         env:
           # NEXT_PUBLIC_* vars must be set as GitHub Actions secrets per environment.
           # Go to Settings → Environments → production (or staging) → Secrets.
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY are deliberately NOT passed: the repo secrets still
+          # held the pre-2026-05-24 shared project, which baked the wrong database into every CI build
+          # ("Invalid API key" on all server routes). lib/supabase/* carry the GolfPack project values.
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN: ${{ secrets.NEXT_PUBLIC_EMAIL_FORWARD_DOMAIN }}
           NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ViewportGuard } from "@/components/ViewportGuard";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`} style={{ color: "#fff" }}>
+        <ViewportGuard />
         {children}
       </body>
     </html>

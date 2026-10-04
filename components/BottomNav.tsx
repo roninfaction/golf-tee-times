@@ -33,18 +33,11 @@ export function BottomNav() {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50"
       style={{
-        // Must stay an opaque, non-composited fixed element.
-        //
-        // backdrop-filter needs a backdrop root to sample. On a position:fixed
-        // element iOS WebKit resolves that root to the scrolling contents layer,
-        // then paints the nav at whatever offset it had at the last repaint —
-        // so it drifts up the page as you scroll instead of staying pinned.
-        // translateZ(0)/willChange made it worse: forcing layer promotion is
-        // what hands the nav to the scrolling layer in the first place.
-        //
-        // The background was already 94% opaque, so the blur was sampling ~6%
-        // of the page for no visible gain. Opaque + no filter = no backdrop
-        // root = nothing for WebKit to mis-attach.
+        // Plain opaque fixed bar. The "nav floats mid-page" bug was never this
+        // element: iOS leaves the whole layout viewport parked above the screen
+        // after the keyboard closes, and everything position:fixed goes with it.
+        // lib/viewport-guard.ts + the html.vv-shifted rule in globals.css handle
+        // that. Keep this element boring: no filter, no transform of its own.
         background: "#071510",
         borderTop: "0.5px solid rgba(80,200,110,0.22)",
         paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",

@@ -45,3 +45,14 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* iOS parks the layout viewport above the screen after the software keyboard closes in a
+   home-screen app (WebKit, iOS 26: visualViewport.offsetTop never returns to 0). Every
+   position:fixed box is anchored to that viewport, so the bottom nav sat mid-screen.
+   lib/viewport-guard.ts measures the leftover offset into --vv-shift and sets .vv-shifted on
+   <html> only while it is non-zero; fixed boxes ride it back down. In a healthy viewport
+   nothing here applies: no class, no transform. */
+html.vv-shifted .fixed,
+html.vv-shifted body::before {
+  translate: 0 var(--vv-shift);
+}

@@ -65,7 +65,7 @@ export default function GroupSetupPage() {
   if (inviteUrl) {
     return (
       <div className="min-h-screen pb-52">
-        <div className="px-4 pt-12 pb-5" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
+        <div className="px-4 pt-safe-top pb-5" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
           <h1 className="text-[17px] font-semibold text-white text-center">Add your crew</h1>
         </div>
         <div className="px-4 pt-8 space-y-4">
@@ -106,7 +106,7 @@ export default function GroupSetupPage() {
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
+      <div className="px-4 pt-safe-top pb-5 flex items-center gap-3" style={{ borderBottom: "0.5px solid rgba(80,200,110,0.10)" }}>
         <Link href="/upcoming" className="flex items-center gap-0.5 text-sm font-medium" style={{ color: "#30D158" }}>
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel

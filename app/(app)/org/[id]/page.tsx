@@ -48,7 +48,7 @@ export default async function OrgPage({ params }: Params) {
   return (
     <div className="min-h-screen pb-52">
       {/* Header */}
-      <div className="px-4 pt-14 pb-5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-5" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-3">
             {org.logo_url ? (

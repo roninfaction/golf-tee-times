@@ -128,7 +128,7 @@ export function TabsView({ people, entries }: { people: TabPerson[]; entries: Ta
   }
 
   return (
-    <div className="px-4 pt-12 pb-52">
+    <div className="px-4 pt-safe-top pb-52">
       <Link href="/group" className="inline-flex items-center gap-1 text-sm font-medium mb-4" style={{ color: GREEN }}>
         <ChevronLeft size={18} strokeWidth={2} />
         Group

@@ -136,7 +136,7 @@ export default function NewTeeTimePage() {
   return (
     <div className="min-h-screen pb-52">
       {/* Header */}
-      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <button
           type="button"
           onClick={() => router.push("/upcoming")}

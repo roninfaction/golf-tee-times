@@ -72,7 +72,7 @@ export default async function AdminSideBetsPage() {
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <Link href="/admin" className="inline-flex items-center gap-1 text-sm font-medium mb-3" style={{ color: GREEN }}>
           <ChevronLeft size={18} strokeWidth={2} />
           Dashboard

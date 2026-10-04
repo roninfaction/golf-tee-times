@@ -32,6 +32,13 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* Top of every screen. The status bar is 59pt on a Pro Max and iOS 26 draws a blur band
+     under it in installed apps, so a hard-coded pt-12 (48px) put header buttons inside both.
+     Pair with the solid strip in app/(app)/layout.tsx, which stops the blur. */
+  .pt-safe-top {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
+  }
+
   /* Hide date/time input native chrome on dark backgrounds */
   input[type="date"]::-webkit-calendar-picker-indicator,
   input[type="time"]::-webkit-calendar-picker-indicator {

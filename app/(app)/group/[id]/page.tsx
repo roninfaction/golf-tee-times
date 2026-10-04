@@ -76,7 +76,7 @@ export default async function GroupPage({ params }: Params) {
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="pt-12">
+      <div className="pt-safe-top">
         <GroupPhotoUpload groupId={group.id} currentPhotoUrl={group.photo_url} />
       </div>
 

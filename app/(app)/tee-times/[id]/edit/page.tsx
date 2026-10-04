@@ -122,7 +122,7 @@ export default function EditTeeTimePage() {
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <Link href={`/tee-times/${id}`} style={{ color: "#30D158" }} className="flex items-center gap-0.5 text-sm font-medium active:opacity-50 transition-opacity duration-75">
           <ChevronLeft size={18} strokeWidth={2} />
           Cancel

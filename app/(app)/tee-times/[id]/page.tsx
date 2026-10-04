@@ -160,11 +160,13 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
       <div className="relative pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         {course?.photo_uri ? (
           <>
-            <div className="relative h-56 w-full">
+            {/* Starts under the status bar, not behind it: the solid strip in the app layout
+                owns that band, so a full-bleed photo would show a cut-off edge there. */}
+            <div className="relative h-56 w-full" style={{ marginTop: "env(safe-area-inset-top, 0px)" }}>
               <img src={course.photo_uri} alt={teeTime.course_name} className="w-full h-full object-cover" />
               <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.82) 100%)" }} />
             </div>
-            <div className="absolute top-0 left-0 right-0 px-4 pt-12">
+            <div className="absolute top-0 left-0 right-0 px-4 pt-safe-top">
               <div className="flex items-center justify-between mb-4">
                 <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>
                   <ChevronLeft size={18} strokeWidth={2} />
@@ -190,7 +192,7 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             </div>
           </>
         ) : (
-          <div className="px-4 pt-12">
+          <div className="px-4 pt-safe-top">
             <div className="flex items-center justify-between mb-4">
               <Link href={backHref} className="inline-flex items-center gap-1 text-sm font-medium" style={{ color: "#30D158" }}>
                 <ChevronLeft size={18} strokeWidth={2} />

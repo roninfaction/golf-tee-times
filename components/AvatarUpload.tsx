@@ -161,7 +161,7 @@ export function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props) {
       {rawSrc && (
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "#000" }}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 pt-12 pb-4 shrink-0">
+          <div className="flex items-center justify-between px-4 pt-safe-top pb-4 shrink-0">
             <button onClick={cancelCrop} className="flex items-center gap-1.5 text-sm font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
               <X size={16} />
               Cancel

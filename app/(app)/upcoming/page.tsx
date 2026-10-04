@@ -101,7 +101,7 @@ export default async function UpcomingPage() {
   });
 
   return (
-    <div className="px-4 pt-12 pb-52">
+    <div className="px-4 pt-safe-top pb-52">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

@@ -21,6 +21,7 @@ export function installViewportGuard(): () => void {
   let applied = 0;
   let raf = 0;
   let healTimer: ReturnType<typeof setTimeout> | undefined;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
   let healTries = 0;
 
   function keyboardUp(): boolean {
@@ -55,12 +56,21 @@ export function installViewportGuard(): () => void {
     return apply(shift < 2 ? 0 : Math.round(shift));
   }
 
+  // Healthy viewport: wait for it to settle. iOS reports a transient offset during the
+  // rubber-band bounce at the end of every scroll, and reacting to it made the nav chase
+  // the bounce a frame behind (jitter). Stale viewport: track every frame, because the
+  // offset changes under the finger while iOS drags the layout viewport along.
   function schedule() {
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      measure();
-    });
+    if (applied > 0) {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        measure();
+      });
+    } else {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(measure, 150);
+    }
   }
 
   // A programmatic scroll hands WebKit a fresh scroll position and it re-anchors the layout
@@ -101,7 +111,7 @@ export function installViewportGuard(): () => void {
   document.addEventListener("visibilitychange", onVisibility);
   // Belt and braces: iOS does not always fire a viewport event when it leaves the offset behind.
   const tick = setInterval(() => {
-    if (document.visibilityState === "visible") measure();
+    if (document.visibilityState === "visible") schedule();
   }, 1000);
   measure();
 
@@ -115,6 +125,7 @@ export function installViewportGuard(): () => void {
     document.removeEventListener("visibilitychange", onVisibility);
     clearInterval(tick);
     clearTimeout(healTimer);
+    clearTimeout(settleTimer);
     cancelAnimationFrame(raf);
     apply(0);
   };

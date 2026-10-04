@@ -67,7 +67,7 @@ export default async function PastPage({
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="px-4 pt-12 pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-6" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <h1 className="text-[28px] font-bold text-white tracking-tight">History</h1>
       </div>
 

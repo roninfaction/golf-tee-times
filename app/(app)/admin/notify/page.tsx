@@ -98,7 +98,7 @@ export default function AdminNotifyPage() {
 
   return (
     <div className="min-h-screen pb-52">
-      <div className="px-4 pt-12 pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
+      <div className="px-4 pt-safe-top pb-5 flex items-center gap-3" style={{ borderBottom: `0.5px solid ${DIVIDER}` }}>
         <Link href="/admin" style={{ color: GREEN }} className="flex items-center gap-0.5 text-sm font-medium">
           <ChevronLeft size={18} strokeWidth={2} />
           Admin

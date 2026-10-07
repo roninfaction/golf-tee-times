@@ -5,6 +5,9 @@ compatibility_date = "2024-09-23"
 [triggers]
 crons = ["*/15 * * * *"]
 
-# Set these in the Cloudflare dashboard under Workers → golf-tee-times-cron → Settings → Variables
-# APP_URL = "https://golf-tee-times.pages.dev"
-# CRON_SECRET = "7e8ad2791438d239a710aed04ae5ecdf3c171fc37047fba6aaeb8929bbae069f"
+# CRON_SECRET is a Worker secret (never write it here: this repo is PUBLIC). Set it from
+# .env.local with the piped command in index.js. APP_URL defaults to golf-tee-times.pages.dev.
+
+# So a failed reminders call shows its reason in the dashboard, not just "exception".
+[observability]
+enabled = true

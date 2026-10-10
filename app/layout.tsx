@@ -5,6 +5,13 @@ import { ViewportGuard } from "@/components/ViewportGuard";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
+// Render every page per request. A prerendered page shares one in-flight render per
+// Worker isolate (Next's ResponseCache batcher); on Cloudflare, if that render's request
+// dies mid-flight the shared promise never settles, and every later request for the page
+// on that isolate hangs until the isolate is evicted. /login hung on ~half of PDX requests
+// for hours this way (Oct 2026); redeploys only cleared it until the next wedge.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "GolfPack",
   description: "Golf tee time scheduling for your group",

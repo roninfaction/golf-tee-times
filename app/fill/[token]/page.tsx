@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { formatTeeDateLong, formatTeeTime } from "@/lib/format";
+import { LOGO_OG_IMAGE } from "@/lib/og";
 import { FillSpotClient } from "./FillSpotClient";
 
 type PageProps = { params: Promise<{ token: string }> };
@@ -147,8 +148,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title,
     description,
-    openGraph: { title, description, siteName: "GolfPack" },
-    twitter: { card: "summary", title, description },
+    openGraph: { title, description, siteName: "GolfPack", images: [LOGO_OG_IMAGE] },
+    twitter: { card: "summary", title, description, images: [LOGO_OG_IMAGE.url] },
   };
 }
 

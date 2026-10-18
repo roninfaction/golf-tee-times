@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ViewportGuard } from "@/components/ViewportGuard";
+import { LOGO_OG_IMAGE } from "@/lib/og";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -13,9 +14,19 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://golfpack.app"),
   title: "GolfPack",
   description: "Golf tee time scheduling for your group",
   manifest: "/manifest.json",
+  icons: { icon: "/icons/icon-192.png" },
+  // Pages that set their own openGraph/twitter replace these, so they must add LOGO_OG_IMAGE too.
+  openGraph: {
+    title: "GolfPack",
+    description: "Golf tee time scheduling for your group",
+    siteName: "GolfPack",
+    images: [LOGO_OG_IMAGE],
+  },
+  twitter: { card: "summary", images: [LOGO_OG_IMAGE.url] },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

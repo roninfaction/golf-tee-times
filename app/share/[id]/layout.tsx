@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { LOGO_OG_IMAGE } from "@/lib/og";
 import type { Metadata } from "next";
 
 type Params = { params: Promise<{ id: string }> };
@@ -46,15 +47,15 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
       title,
       description,
       type: "website",
-      ...(photoUri
-        ? { images: [{ url: photoUri, width: 1200, height: 630, alt: courseName }] }
-        : {}),
+      images: photoUri
+        ? [{ url: photoUri, width: 1200, height: 630, alt: courseName }]
+        : [LOGO_OG_IMAGE],
     },
     twitter: {
-      card: "summary_large_image",
+      card: photoUri ? "summary_large_image" : "summary",
       title,
       description,
-      ...(photoUri ? { images: [photoUri] } : {}),
+      images: [photoUri ?? LOGO_OG_IMAGE.url],
     },
   };
 }

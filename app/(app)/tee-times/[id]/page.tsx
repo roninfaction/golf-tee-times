@@ -387,18 +387,23 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
             <div className="mt-2 rounded-2xl overflow-hidden" style={{ background: CARD_BG, border: `0.5px solid ${CARD_BORDER}` }}>
               {pendingGuests.map((guest, i) => {
                 const isLast = i === pendingGuests.length - 1;
+                // An unnamed pending row is the reusable share link (migration 037), not a person
+                // waiting to answer, so it reads as the link and whether it still has room.
+                const isShareLink = !guest.invitee_name;
                 return (
                   <div key={guest.id} className="flex items-center justify-between px-4 py-3.5" style={{ borderBottom: isLast ? "none" : `0.5px solid ${DIVIDER}` }}>
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0" style={{ background: "rgba(201,168,76,0.12)", color: "rgba(201,168,76,0.7)" }}>
-                        ?
+                        {isShareLink ? <Link2 size={14} /> : "?"}
                       </div>
                       <span className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
-                        {guest.invitee_name ?? "Pending invite"}
+                        {isShareLink ? "Guest invite link" : guest.invitee_name}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>Pending</span>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: "rgba(201,168,76,0.15)", color: GOLD }}>
+                        {!isShareLink ? "Pending" : openSpots > 0 ? "Open" : "Full"}
+                      </span>
                       {teeTime.created_by === user.id && (
                         <DeleteGuestInviteButton guestInviteId={guest.id} />
                       )}

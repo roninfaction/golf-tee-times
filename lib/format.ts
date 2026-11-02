@@ -87,3 +87,10 @@ export function buildIcsContent({
     "END:VCALENDAR",
   ].join("\r\n");
 }
+
+// Guest invite headline: the link preview title and the opening line of the shared text.
+// Naming the host is what tells friends the link isn't spam.
+export function guestInviteHeadline(inviterName?: string | null): string {
+  const first = inviterName?.trim().split(/\s+/)[0];
+  return first ? `You've been invited! RSVP to ${first}'s tee time` : "You've been invited! RSVP to this tee time";
+}

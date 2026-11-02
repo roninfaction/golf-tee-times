@@ -1,10 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { UserPlus, Copy, Check } from "lucide-react";
+import { UserPlus, Share2, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
+import { formatTeeDate, formatTeeTime, guestInviteHeadline } from "@/lib/format";
 
-export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string; openSpots: number }) {
+type Props = {
+  teeTimeId: string;
+  openSpots: number;
+  courseName: string;
+  teeDatetime: string;
+  timezone: string;
+  inviterName: string | null;
+};
+
+export function InviteGuestButton({ teeTimeId, openSpots, courseName, teeDatetime, timezone, inviterName }: Props) {
   const [loading, setLoading] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -30,9 +40,14 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
     }
   }
 
-  async function copyLink() {
+  // The text goes out with the link so friends see who it's from, not a bare URL.
+  async function shareInvite() {
     if (!link) return;
-    await navigator.clipboard.writeText(link);
+    const text = `${guestInviteHeadline(inviterName)} at ${courseName} on ${formatTeeDate(teeDatetime, timezone)} at ${formatTeeTime(teeDatetime, timezone)}.`;
+    if (navigator.share) {
+      try { await navigator.share({ text, url: link }); return; } catch { /* dismissed: fall through to copy */ }
+    }
+    await navigator.clipboard.writeText(`${text} ${link}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }
@@ -64,12 +79,12 @@ export function InviteGuestButton({ teeTimeId, openSpots }: { teeTimeId: string;
             <p className="font-mono text-xs break-all" style={{ color: "#30D158" }}>{link}</p>
           </div>
           <button
-            onClick={copyLink}
+            onClick={shareInvite}
             className="flex items-center gap-2 w-full rounded-xl py-3 text-sm font-semibold justify-center transition-opacity"
             style={{ background: "#30D158", color: "#000" }}
           >
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-            {copied ? "Copied!" : "Copy link"}
+            {copied ? <Check size={15} /> : <Share2 size={15} />}
+            {copied ? "Copied!" : "Share invite"}
           </button>
           <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.25)" }}>
             Share this one link with everyone — it stays live until every spot is filled

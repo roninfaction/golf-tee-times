@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { formatTeeDateLong, formatTeeTime } from "@/lib/format";
+import { formatTeeDateLong, formatTeeTime, guestInviteHeadline } from "@/lib/format";
 import { LOGO_OG_IMAGE } from "@/lib/og";
 import { FillSpotClient } from "./FillSpotClient";
 
@@ -140,10 +140,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   const dateStr = formatTeeDateLong(data.teeTime.tee_datetime, data.group_timezone);
   const timeStr = formatTeeTime(data.teeTime.tee_datetime, data.group_timezone);
-  const title = `Tee time at ${data.teeTime.course_name}`;
-  const description = data.scores.length > 0
-    ? `${dateStr} · Round results with ${data.group_name}. Tap to view.`
-    : `${dateStr} at ${timeStr} · ${data.teeTime.holes} holes · with ${data.group_name}.`;
+  // Upcoming rounds read as a personal invite; past rounds keep the results preview.
+  const isInvite = !data.is_past && data.scores.length === 0;
+  const title = isInvite
+    ? guestInviteHeadline(data.invite.inviter_name)
+    : `Tee time at ${data.teeTime.course_name}`;
+  const description = isInvite
+    ? `${data.teeTime.course_name} · ${dateStr} at ${timeStr} · ${data.teeTime.holes} holes`
+    : data.scores.length > 0
+      ? `${dateStr} · Round results with ${data.group_name}. Tap to view.`
+      : `${dateStr} at ${timeStr} · ${data.teeTime.holes} holes · with ${data.group_name}.`;
 
   return {
     title,

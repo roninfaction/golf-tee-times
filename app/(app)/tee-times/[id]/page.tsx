@@ -426,7 +426,14 @@ export default async function TeeTimeDetailPage({ params }: PageProps) {
 
         {/* Invite guest — open spots only */}
         {!isPast && openSpots > 0 && (
-          <InviteGuestButton teeTimeId={teeTime.id} openSpots={openSpots} />
+          <InviteGuestButton
+            teeTimeId={teeTime.id}
+            openSpots={openSpots}
+            courseName={teeTime.course_name}
+            teeDatetime={teeTime.tee_datetime}
+            timezone={groupTz}
+            inviterName={myRsvp?.profile?.display_name ?? null}
+          />
         )}
 
         {/* Game: optional teams, stakes and scores. Hidden entirely unless someone sets one up. */}
